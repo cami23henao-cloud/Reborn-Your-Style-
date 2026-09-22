@@ -458,29 +458,50 @@ app.post('/api/auth/reset-password', (req, res) => {
   }
 });
 
-// 6. Auth: Real Google OAuth with cryptographic ID token verification
+// 6. Auth: Real Google OAuth with cryptographic token verification (supports ID token and OAuth2 Access Token)
 app.post('/api/auth/google', async (req, res) => {
   try {
-    const { credential } = req.body;
-    if (!credential) {
-      return res.status(400).json({ error: 'Credencial de Google no recibida.' });
+    const { credential, accessToken } = req.body;
+    if (!credential && !accessToken) {
+      return res.status(400).json({ error: 'Credencial o token de Google no recibido.' });
     }
 
-    // Validate token cryptographically with official Google OAuth verification endpoint
-    const googleVerifyRes = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-    );
+    let payload: {
+      sub: string;
+      email?: string;
+      email_verified?: boolean | string;
+      name?: string;
+      picture?: string;
+    } | null = null;
 
-    if (!googleVerifyRes.ok) {
+    if (credential) {
+      // Validate Google ID token with official Google OAuth verification endpoint
+      const googleVerifyRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+      );
+      if (googleVerifyRes.ok) {
+        payload = await googleVerifyRes.json();
+      }
+    } else if (accessToken) {
+      // Validate OAuth2 access token with official Google userinfo endpoint
+      const googleUserInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (googleUserInfoRes.ok) {
+        payload = await googleUserInfoRes.json();
+      }
+    }
+
+    if (!payload) {
       return res.status(401).json({
         error: 'La autenticación no pudo ser verificada por Google. Token inválido o expirado.',
       });
     }
 
-    const payload = await googleVerifyRes.json();
     const cleanEmail = payload.email?.toLowerCase().trim();
+    const isEmailVerified = payload.email_verified === true || payload.email_verified === 'true';
 
-    if (!cleanEmail || !payload.email_verified) {
+    if (!cleanEmail || !isEmailVerified) {
       return res.status(401).json({
         error: 'La cuenta de Google no tiene una dirección de correo verificada por Google.',
       });

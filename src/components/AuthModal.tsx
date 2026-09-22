@@ -29,19 +29,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
-  const [showGoogleConfigHelper, setShowGoogleConfigHelper] = useState(false);
-  const [customClientId, setCustomClientId] = useState(() => {
-    return localStorage.getItem('reborn_custom_google_client_id') || '';
-  });
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  // Active Client ID resolution
-  const activeClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || customClientId || '';
+  // Active Google OAuth Client ID from environment
+  const activeClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   const hasValidClientId = Boolean(
     activeClientId &&
-    activeClientId.includes('.apps.googleusercontent.com') &&
-    !activeClientId.includes('demo-')
+    activeClientId.includes('.apps.googleusercontent.com')
   );
 
   // Countdown timer for 6-digit code
@@ -60,7 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     if (hasValidClientId && (window as any).google?.accounts?.id && googleBtnRef.current) {
       try {
         (window as any).google.accounts.id.initialize({
-          client_id: activeClientId.trim(),
+          client_id: activeClientId,
           callback: handleGoogleCredentialResponse,
           auto_select: false,
           cancel_on_tap_outside: true,
@@ -116,18 +111,74 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     }
   };
 
-  const handleSaveCustomClientId = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanId = customClientId.trim();
-    if (!cleanId || !cleanId.includes('.apps.googleusercontent.com')) {
-      setErrorMessage('El Client ID debe terminar en .apps.googleusercontent.com');
+  // Direct Google Login Trigger (OAuth2 Popup Flow)
+  const handleGoogleLoginClick = () => {
+    setErrorMessage('');
+    setInfoMessage('');
+
+    if (!activeClientId) {
+      setErrorMessage(
+        'Para activar "Continuar con Google", configura la variable de entorno VITE_GOOGLE_CLIENT_ID en Settings con tu Client ID de Google Cloud Console.'
+      );
       return;
     }
 
-    localStorage.setItem('reborn_custom_google_client_id', cleanId);
-    setShowGoogleConfigHelper(false);
-    setInfoMessage('Client ID guardado correctamente. Inicializando Google Sign-In...');
-    setErrorMessage('');
+    if (!(window as any).google?.accounts) {
+      setErrorMessage('Los servicios de Google Identity se están cargando. Por favor, reintenta en un momento.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      if ((window as any).google.accounts.oauth2) {
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: activeClientId,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              setLoading(false);
+              if (tokenResponse.error !== 'popup_closed_by_user') {
+                setErrorMessage(`Error en autenticación de Google: ${tokenResponse.error_description || tokenResponse.error}`);
+              }
+              return;
+            }
+
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('/api/auth/google', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ accessToken: tokenResponse.access_token }),
+                });
+
+                const data = await res.json();
+                if (res.ok && data.user) {
+                  if (data.token) {
+                    localStorage.setItem('reborn_session_token', data.token);
+                  }
+                  onLoginSuccess(data.user);
+                  onClose();
+                } else {
+                  setErrorMessage(data.error || 'No se pudo verificar la cuenta con Google.');
+                }
+              } catch (err) {
+                setErrorMessage('Error al conectar con el servidor.');
+              } finally {
+                setLoading(false);
+              }
+            }
+          },
+        });
+
+        tokenClient.requestAccessToken();
+      } else if ((window as any).google.accounts.id) {
+        (window as any).google.accounts.id.prompt();
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMessage('Error al abrir la ventana de autenticación de Google.');
+    }
   };
 
   // 1. Login with email & password
@@ -450,77 +501,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           {mode !== 'forgot' && step === 'form' && (
             <div className="space-y-3">
               <div className="flex flex-col items-center justify-center">
-                <div
-                  ref={googleBtnRef}
-                  id="modal-google-btn-container"
-                  className="w-full flex justify-center min-h-[44px]"
-                >
-                  {!hasValidClientId && (
-                    <button
-                      id="modal-btn-google-action"
-                      type="button"
-                      onClick={() => setShowGoogleConfigHelper(!showGoogleConfigHelper)}
-                      className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-full border border-[#e6e2dd] bg-white hover:bg-[#f8f3ee] text-[#1d1b19] text-xs font-semibold transition-all shadow-sm"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
-                      <span>Continuar con Google</span>
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleConfigHelper(!showGoogleConfigHelper)}
-                  className="mt-2 text-[11px] text-[#486548] hover:text-[#032517] underline decoration-dotted inline-flex items-center gap-1 font-medium"
-                >
-                  <Settings className="w-3 h-3" />
-                  <span>¿Problemas con Google o &quot;Acceso bloqueado&quot;?</span>
-                </button>
+                {hasValidClientId ? (
+                  <div
+                    ref={googleBtnRef}
+                    id="modal-google-btn-container"
+                    className="w-full flex justify-center min-h-[44px]"
+                  />
+                ) : (
+                  <button
+                    id="modal-btn-google-action"
+                    type="button"
+                    disabled={loading}
+                    onClick={handleGoogleLoginClick}
+                    className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-full border border-[#e6e2dd] bg-white hover:bg-[#f8f3ee] text-[#1d1b19] text-xs font-semibold transition-all shadow-sm active:scale-98 cursor-pointer disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>Continuar con Google</span>
+                  </button>
+                )}
               </div>
-
-              {/* Helper */}
-              {showGoogleConfigHelper && (
-                <div className="p-3 bg-[#f8f3ee] border border-[#e6e2dd] rounded-xl text-xs space-y-2 animate-in fade-in">
-                  <p className="text-[#424843] text-[11px]">
-                    Registra este origen en tu Google Cloud Console para evitar &quot;Acceso bloqueado&quot;:
-                  </p>
-                  <code className="text-[10px] text-[#032517] font-mono break-all select-all block bg-white p-1 rounded border border-[#e6e2dd]">
-                    {currentOrigin}
-                  </code>
-                  <form onSubmit={handleSaveCustomClientId} className="space-y-1.5 pt-1">
-                    <input
-                      type="text"
-                      placeholder="Client ID (xxx.apps.googleusercontent.com)"
-                      value={customClientId}
-                      onChange={(e) => setCustomClientId(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-[#e6e2dd] rounded-lg text-[11px] font-mono outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="w-full py-1 text-[11px] font-semibold bg-[#032517] text-white rounded-lg hover:bg-[#1b3b2b]"
-                    >
-                      Activar Google Sign-In
-                    </button>
-                  </form>
-                </div>
-              )}
 
               <div className="relative flex py-1 items-center">
                 <div className="flex-grow border-t border-[#e6e2dd]"></div>
