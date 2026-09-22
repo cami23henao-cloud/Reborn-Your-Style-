@@ -549,6 +549,53 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
+// 6b. Auth: Firebase User Synchronization endpoint
+app.post('/api/auth/firebase-sync', (req, res) => {
+  try {
+    const { user: fbUser } = req.body;
+    if (!fbUser || !fbUser.id || !fbUser.email) {
+      return res.status(400).json({ error: 'Datos de usuario de Firebase requeridos.' });
+    }
+
+    const cleanEmail = fbUser.email.toLowerCase().trim();
+    let user = usersStore.get(cleanEmail);
+    if (!user) {
+      user = {
+        id: fbUser.id,
+        name: fbUser.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        avatar: fbUser.avatar || '',
+        bio: fbUser.bio || 'Miembro de Reborn Your Style con cuenta verificada.',
+        country: fbUser.country || 'Colombia',
+        department: fbUser.department || 'Antioquia',
+        city: fbUser.city || 'Medellín',
+        neighborhood: fbUser.neighborhood || 'Buenos Aires',
+        address: fbUser.address || '',
+        phone: fbUser.phone || '',
+        preferences: fbUser.preferences || ['Moda circular', 'Upcycling de proximidad', 'Sastrería'],
+        isVerified: true,
+        joinedDate: fbUser.joinedDate || new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+        authProvider: 'google',
+      };
+      usersStore.set(cleanEmail, user);
+    } else {
+      if (fbUser.avatar) user.avatar = fbUser.avatar;
+      usersStore.set(cleanEmail, user);
+    }
+
+    const sessionToken = `rys_fb_${crypto.randomBytes(32).toString('hex')}`;
+    sessionsStore.set(sessionToken, user.id);
+
+    return res.json({
+      success: true,
+      user: sanitizeUser(user),
+      token: sessionToken,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al sincronizar sesión de Firebase.' });
+  }
+});
+
 // 4. Auth: Logout
 app.post('/api/auth/logout', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');

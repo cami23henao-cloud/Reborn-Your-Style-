@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { X, Mail, Lock, User as UserIcon, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, KeyRound, ExternalLink, ShieldCheck, Settings, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { loginWithGoogleFirebase } from '../lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -135,96 +136,121 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     }
   };
 
-  // Direct Google Login Trigger (OAuth2 Popup Flow)
-  const handleGoogleLoginClick = () => {
+  // Direct Google Login Trigger (Powered by Firebase Authentication + GSI Fallback)
+  const handleGoogleLoginClick = async () => {
     setErrorMessage('');
     setInfoMessage('');
+    setLoading(true);
 
-    if (!hasValidClientId) {
+    try {
+      // 1. Primary: Use Firebase Authentication Google popup flow
+      const fbUser = await loginWithGoogleFirebase();
+      if (fbUser) {
+        // Synchronize session token with server
+        try {
+          const syncRes = await fetch('/api/auth/firebase-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: fbUser }),
+          });
+          const syncData = await syncRes.json();
+          if (syncData.token) {
+            localStorage.setItem('reborn_session_token', syncData.token);
+          }
+        } catch (e) {}
+
+        onLoginSuccess(fbUser);
+        onClose();
+        return;
+      }
+    } catch (fbErr: any) {
+      if (
+        fbErr?.code === 'auth/popup-closed-by-user' ||
+        fbErr?.code === 'auth/cancelled-popup-request'
+      ) {
+        setLoading(false);
+        return;
+      }
+
+      console.warn('Firebase login attempt, checking GSI fallback:', fbErr);
+
+      // 2. Fallback to Google Identity Services if Client ID is configured
+      if (hasValidClientId) {
+        runGoogleIdentityFlow();
+        return;
+      }
+
+      setLoading(false);
       setErrorMessage(
-        'Para activar "Continuar con Google", configura la variable de entorno VITE_GOOGLE_CLIENT_ID en Settings con tu Client ID de Google Cloud Console.'
+        fbErr?.message || 'Error al conectar con Google. Por favor intenta de nuevo.'
       );
-      return;
     }
+  };
 
-    const runAuthFlow = () => {
-      try {
-        setLoading(true);
-        if ((window as any).google?.accounts?.oauth2) {
-          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: activeClientId,
-            scope: 'openid email profile',
-            callback: async (tokenResponse: any) => {
-              if (tokenResponse?.error) {
-                setLoading(false);
-                if (tokenResponse.error !== 'popup_closed_by_user') {
+  const runGoogleIdentityFlow = () => {
+    try {
+      if ((window as any).google?.accounts?.oauth2) {
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: activeClientId,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              setLoading(false);
+              if (tokenResponse.error !== 'popup_closed_by_user') {
+                if (tokenResponse.error === 'access_denied') {
+                  setErrorMessage(
+                    'Google indicó acceso denegado: En Google Cloud Console tu pantalla de consentimiento OAuth está en modo "En prueba". Para que cualquier usuario de Google pueda entrar libremente sin que tengas que registrarlo manualmente, haz clic en "Publicar aplicación" en Google Cloud Console.'
+                  );
+                } else {
                   setErrorMessage(
                     `Error de Google (${tokenResponse.error}): ${
                       tokenResponse.error_description ||
-                      'Verifica que tu dominio esté agregado en Orígenes de JavaScript autorizados en tu Google Cloud Console.'
+                      'Verifica que tu dominio esté agregado en Orígenes de JavaScript autorizados en Google Cloud Console.'
                     }`
                   );
                 }
-                return;
               }
+              return;
+            }
 
-              if (tokenResponse?.access_token) {
-                try {
-                  const res = await fetch('/api/auth/google', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ accessToken: tokenResponse.access_token }),
-                  });
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('/api/auth/google', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ accessToken: tokenResponse.access_token }),
+                });
 
-                  const data = await res.json();
-                  if (res.ok && data.user) {
-                    if (data.token) {
-                      localStorage.setItem('reborn_session_token', data.token);
-                    }
-                    onLoginSuccess(data.user);
-                    onClose();
-                  } else {
-                    setErrorMessage(data.error || 'No se pudo verificar la cuenta con Google.');
+                const data = await res.json();
+                if (res.ok && data.user) {
+                  if (data.token) {
+                    localStorage.setItem('reborn_session_token', data.token);
                   }
-                } catch (err) {
-                  setErrorMessage('Error al conectar con el servidor.');
-                } finally {
-                  setLoading(false);
+                  onLoginSuccess(data.user);
+                  onClose();
+                } else {
+                  setErrorMessage(data.error || 'No se pudo verificar la cuenta con Google.');
                 }
+              } catch (err) {
+                setErrorMessage('Error al conectar con el servidor.');
+              } finally {
+                setLoading(false);
               }
-            },
-          });
+            }
+          },
+        });
 
-          tokenClient.requestAccessToken();
-        } else if ((window as any).google?.accounts?.id) {
-          (window as any).google.accounts.id.prompt();
-          setLoading(false);
-        } else {
-          setLoading(false);
-          setErrorMessage('Los servicios de Google Identity se están cargando. Por favor, reintenta en un momento.');
-        }
-      } catch (err: any) {
+        tokenClient.requestAccessToken();
+      } else if ((window as any).google?.accounts?.id) {
+        (window as any).google.accounts.id.prompt();
         setLoading(false);
-        setErrorMessage('Error al abrir la ventana de autenticación de Google.');
+      } else {
+        setLoading(false);
+        setErrorMessage('Servicio de Google no disponible temporalmente.');
       }
-    };
-
-    if (!(window as any).google?.accounts) {
-      setLoading(true);
-      let attempts = 0;
-      const interval = setInterval(() => {
-        attempts++;
-        if ((window as any).google?.accounts) {
-          clearInterval(interval);
-          runAuthFlow();
-        } else if (attempts >= 10) {
-          clearInterval(interval);
-          setLoading(false);
-          setErrorMessage('El servicio de Google aún no está listo. Por favor, recarga la página o reintenta en unos segundos.');
-        }
-      }, 150);
-    } else {
-      runAuthFlow();
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMessage('Error al abrir la ventana de autenticación de Google.');
     }
   };
 

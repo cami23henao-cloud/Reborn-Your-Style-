@@ -26,6 +26,7 @@ import { AdvisorModal } from './components/AdvisorModal';
 import { ProfessionalModal } from './components/ProfessionalModal';
 import { TutorialModal } from './components/TutorialModal';
 import { ProposeIdeaModal } from './components/ProposeIdeaModal';
+import { logoutFirebaseUser, onFirebaseAuthStateChanged, updateUserProfileInFirestore } from './lib/firebase';
 
 export const App: React.FC = () => {
   // Application Data States - User starts as null (guest) unless authenticated session exists
@@ -124,6 +125,21 @@ export const App: React.FC = () => {
         setCurrentUser(null);
       }
     }
+  }, []);
+
+  // Listen to Firebase Auth state updates
+  useEffect(() => {
+    const unsubscribe = onFirebaseAuthStateChanged((fbUser) => {
+      if (fbUser) {
+        setCurrentUser((prev) => {
+          if (!prev || prev.id !== fbUser.id) {
+            return fbUser;
+          }
+          return prev;
+        });
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Sync private user data when authenticated user changes
@@ -334,6 +350,7 @@ export const App: React.FC = () => {
   // Handler: Profile updates
   const handleUpdateUser = async (updated: User) => {
     setCurrentUser(updated);
+    updateUserProfileInFirestore(updated).catch(() => {});
     try {
       await fetch('/api/profile', {
         method: 'PUT',
@@ -350,6 +367,10 @@ export const App: React.FC = () => {
 
   // Handler: Logout (cleans all session data, resets auth state, prevents cross-user exposure)
   const handleLogout = async () => {
+    try {
+      await logoutFirebaseUser();
+    } catch (e) {}
+
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',

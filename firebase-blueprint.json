@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information in Reborn Your Style",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user identifier corresponding to Firebase Auth UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Avatar image URL"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short biography or description"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country of residence"
+        },
+        "department": {
+          "type": "string",
+          "description": "State or department"
+        },
+        "city": {
+          "type": "string",
+          "description": "City of residence"
+        },
+        "neighborhood": {
+          "type": "string",
+          "description": "Neighborhood or district"
+        },
+        "address": {
+          "type": "string",
+          "description": "Postal or delivery address"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number"
+        },
+        "isVerified": {
+          "type": "boolean",
+          "description": "Whether the user's email is verified"
+        },
+        "joinedDate": {
+          "type": "string",
+          "description": "Date when the user registered"
+        },
+        "authProvider": {
+          "type": "string",
+          "description": "Identity provider (google or email)"
+        }
+      },
+      "required": ["id", "email", "name"]
+    },
+    "TailoringRequest": {
+      "title": "TailoringRequest",
+      "description": "Custom tailoring or upcycling service request",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Request unique ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "Owner email"
+        },
+        "serviceType": {
+          "type": "string",
+          "description": "Type of service requested"
+        },
+        "garmentType": {
+          "type": "string",
+          "description": "Type of garment"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of custom modifications"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of the order"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        }
+      },
+      "required": ["id", "userId", "serviceType", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document accessible only by the owner or public profile read."
+    },
+    "/tailoring_requests/{requestId}": {
+      "schema": "TailoringRequest",
+      "description": "Tailoring requests created and owned by users."
+    }
+  }
+}
