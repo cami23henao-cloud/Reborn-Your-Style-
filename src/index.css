@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #fef8f3;
+  --color-surface-dim: #ded9d4;
+  --color-surface-bright: #fef8f3;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f8f3ee;
+  --color-surface-container: #f2ede8;
+  --color-surface-container-high: #ece7e2;
+  --color-surface-container-highest: #e6e2dd;
+  --color-on-surface: #1d1b19;
+  --color-on-surface-variant: #424843;
+  --color-inverse-surface: #32302d;
+  --color-inverse-on-surface: #f5f0eb;
+  --color-outline: #727973;
+  --color-outline-variant: #c1c8c2;
+  --color-surface-tint: #456553;
+  --color-primary: #032517;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1b3b2b;
+  --color-on-primary-container: #83a590;
+  --color-inverse-primary: #abcfb8;
+  --color-secondary: #486548;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #caecc6;
+  --color-on-secondary-container: #4e6c4d;
+  --color-tertiary: #311a00;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #492f0f;
+  --color-on-tertiary-container: #bd966e;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #c7ebd4;
+  --color-primary-fixed-dim: #abcfb8;
+  --color-on-primary-fixed: #002113;
+  --color-on-primary-fixed-variant: #2d4d3c;
+  --color-secondary-fixed: #caecc6;
+  --color-secondary-fixed-dim: #aecfab;
+  --color-on-secondary-fixed: #052109;
+  --color-on-secondary-fixed-variant: #314d32;
+  --color-tertiary-fixed: #ffddbb;
+  --color-tertiary-fixed-dim: #e9bf93;
+  --color-on-tertiary-fixed: #2b1700;
+  --color-on-tertiary-fixed-variant: #5e411f;
+  --color-background: #fef8f3;
+  --color-on-background: #1d1b19;
+  --color-surface-variant: #e6e2dd;
+
+  --font-display-hero: "Bodoni Moda", serif;
+  --font-headline-lg: "Bodoni Moda", serif;
+  --font-headline-md: "Bodoni Moda", serif;
+  --font-headline-sm: "Bodoni Moda", serif;
+  --font-title-lg: "Plus Jakarta Sans", sans-serif;
+  --font-title-md: "Plus Jakarta Sans", sans-serif;
+  --font-body-lg: "Plus Jakarta Sans", sans-serif;
+  --font-body-md: "Plus Jakarta Sans", sans-serif;
+  --font-body-sm: "Plus Jakarta Sans", sans-serif;
+  --font-label-lg: "Plus Jakarta Sans", sans-serif;
+  --font-label-md: "Plus Jakarta Sans", sans-serif;
+  --font-label-sm: "Plus Jakarta Sans", sans-serif;
+}
+
+@layer utilities {
+  .text-display-hero {
+    font-size: clamp(36px, 5vw, 56px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  .text-headline-lg {
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    font-weight: 500;
+  }
+  .text-headline-md {
+    font-size: 28px;
+    line-height: 36px;
+    font-weight: 500;
+  }
+  .text-headline-sm {
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 600;
+  }
+  .text-title-lg {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  .text-title-md {
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 600;
+  }
+  .text-body-lg {
+    font-size: 18px;
+    line-height: 28px;
+    font-weight: 400;
+  }
+  .text-body-md {
+    font-size: 15px;
+    line-height: 24px;
+    font-weight: 400;
+  }
+  .text-body-sm {
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .text-label-lg {
+    font-size: 14px;
+    line-height: 18px;
+    letter-spacing: 0.02em;
+    font-weight: 600;
+  }
+  .text-label-md {
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  .text-label-sm {
+    font-size: 11px;
+    line-height: 14px;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+  }
+  .spacing-gutter {
+    gap: 1.5rem;
+  }
+  .p-space-xs { padding: 0.25rem; }
+  .p-space-sm { padding: 0.5rem; }
+  .p-space-md { padding: 1rem; }
+  .p-space-lg { padding: 1.5rem; }
+  .p-space-xl { padding: 2.5rem; }
+  .p-space-2xl { padding: 4rem; }
+  .py-space-2xl { padding-top: 4rem; padding-bottom: 4rem; }
+  .space-y-space-xs > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; }
+  .space-y-space-sm > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+  .space-y-space-md > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
+  .space-y-space-lg > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }
+  .space-y-space-xl > :not([hidden]) ~ :not([hidden]) { margin-top: 2.5rem; }
+  .space-y-space-2xl > :not([hidden]) ~ :not([hidden]) { margin-top: 4rem; }
+  .gap-space-xs { gap: 0.25rem; }
+  .gap-space-sm { gap: 0.5rem; }
+  .gap-space-md { gap: 1rem; }
+  .gap-space-lg { gap: 1.5rem; }
+  .gap-space-xl { gap: 2.5rem; }
+  .px-margin-mobile { padding-left: 1.25rem; padding-right: 1.25rem; }
+  .px-margin { padding-left: 3rem; padding-right: 3rem; }
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #fef8f3;
+  color: #1d1b19;
+  scroll-behavior: smooth;
+}
+
+/* Material symbols outlined styling */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+

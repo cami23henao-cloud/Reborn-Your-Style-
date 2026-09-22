@@ -1,0 +1,10 @@
+{
+  "name": "Reborn Your Style App",
+  "description": "Plataforma circular para reutilizar, transformar y rediseñar prendas con modistas y artesanos de proximidad.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
