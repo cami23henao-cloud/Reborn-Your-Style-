@@ -17,6 +17,7 @@ import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 
 // Modals and Drawers
+import { AuthScreen } from './components/AuthScreen';
 import { AuthModal } from './components/AuthModal';
 import { PublishModal } from './components/PublishModal';
 import { ProfileModal } from './components/ProfileModal';
@@ -96,6 +97,33 @@ export const App: React.FC = () => {
     };
 
     fetchData();
+  }, []);
+
+  // Validate active session with backend on startup
+  useEffect(() => {
+    const token = localStorage.getItem('reborn_session_token');
+    const savedUser = localStorage.getItem('reborn_user');
+    if (savedUser && token) {
+      try {
+        const u = JSON.parse(savedUser);
+        fetch('/api/auth/me', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-User-Id': u.id,
+          },
+        })
+          .then((res) => {
+            if (!res.ok) {
+              localStorage.removeItem('reborn_user');
+              localStorage.removeItem('reborn_session_token');
+              setCurrentUser(null);
+            }
+          })
+          .catch(() => {});
+      } catch (e) {
+        setCurrentUser(null);
+      }
+    }
   }, []);
 
   // Sync private user data when authenticated user changes
@@ -349,6 +377,7 @@ export const App: React.FC = () => {
     setIsProfileOpen(false);
     setIsChatOpen(false);
     setIsPublishOpen(false);
+    window.history.replaceState(null, '', '/');
   };
 
   // Handler: User deletes their account
@@ -377,6 +406,7 @@ export const App: React.FC = () => {
     setConversations([]);
     setActiveConversationId(null);
     setIsProfileOpen(false);
+    window.history.replaceState(null, '', '/');
   };
 
   const handleOpenPublish = () => {
@@ -395,6 +425,19 @@ export const App: React.FC = () => {
     }
   };
 
+  // MANDATORY AUTHENTICATION GUARD:
+  // Strictly prevent accessing internal content unless logged in.
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          localStorage.setItem('reborn_user', JSON.stringify(user));
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#fef8f3] text-[#1d1b19] flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-[#caecc6] selection:text-[#032517]">
       {/* 1. Header with Complete Navigation & User Control */}
@@ -412,6 +455,7 @@ export const App: React.FC = () => {
           setAdvisorTargetGarment(null);
           setIsAdvisorOpen(true);
         }}
+        onLogout={handleLogout}
       />
 
       {/* 2. Main Sections */}

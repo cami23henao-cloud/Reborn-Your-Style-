@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { MessageSquare, User as UserIcon, Plus, Menu, X, Sparkles, HelpCircle } from 'lucide-react';
+import { MessageSquare, User as UserIcon, Plus, Menu, X, Sparkles, HelpCircle, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onOpenChat: () => void;
   onOpenAdvisor: () => void;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfile,
   onOpenChat,
   onOpenAdvisor,
+  onLogout,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -136,21 +138,34 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* User Profile or Login Button */}
             {currentUser ? (
-              <button
-                id="btn-header-profile"
-                onClick={onOpenProfile}
-                className="flex items-center gap-2 p-1.5 pr-3 hover:bg-[#f2ede8] rounded-full transition-colors border border-[#e6e2dd]"
-                title="Ver y editar perfil"
-              >
-                <img
-                  src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'}
-                  alt={currentUser.name}
-                  className="w-8 h-8 rounded-full object-cover border border-[#486548]"
-                />
-                <span className="text-xs font-semibold text-[#032517] max-w-[90px] truncate">
-                  {currentUser.name.split(' ')[0]}
-                </span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  id="btn-header-profile"
+                  onClick={onOpenProfile}
+                  className="flex items-center gap-2 p-1.5 pr-3 hover:bg-[#f2ede8] rounded-full transition-colors border border-[#e6e2dd]"
+                  title="Ver y editar perfil"
+                >
+                  <img
+                    src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'}
+                    alt={currentUser.name}
+                    className="w-8 h-8 rounded-full object-cover border border-[#486548]"
+                  />
+                  <span className="text-xs font-semibold text-[#032517] max-w-[90px] truncate">
+                    {currentUser.name.split(' ')[0]}
+                  </span>
+                </button>
+
+                {onLogout && (
+                  <button
+                    id="btn-header-logout"
+                    onClick={onLogout}
+                    title="Cerrar sesión"
+                    className="p-2 text-[#727973] hover:text-[#032517] hover:bg-[#f2ede8] rounded-full transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             ) : (
               <button
                 id="btn-header-login"
@@ -253,16 +268,30 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {currentUser ? (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenProfile();
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-[#032517] bg-[#f2ede8] rounded-full"
-              >
-                <UserIcon className="w-4 h-4" />
-                Mi perfil ({currentUser.name})
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenProfile();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-[#032517] bg-[#f2ede8] rounded-full"
+                >
+                  <UserIcon className="w-4 h-4" />
+                  Mi perfil ({currentUser.name})
+                </button>
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-[#727973] hover:text-[#032517] rounded-full"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Cerrar sesión
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 onClick={() => {

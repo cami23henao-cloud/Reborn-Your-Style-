@@ -22,6 +22,14 @@ interface VerificationEntry {
 
 const verificationStore = new Map<string, VerificationEntry>();
 
+// In-memory password reset store (keyed by email)
+interface PasswordResetEntry {
+  code: string;
+  expiresAt: number;
+  email: string;
+}
+const passwordResetStore = new Map<string, PasswordResetEntry>();
+
 // User Database Model
 interface ServerUser {
   id: string;
@@ -95,7 +103,52 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// 1. Auth: Send REAL verification code to user email
+// 1. Auth: Iniciar sesión con correo y contraseña
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'El correo o la contraseña no son correctos.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = usersStore.get(cleanEmail);
+
+    if (!user) {
+      return res.status(401).json({ error: 'El correo o la contraseña no son correctos.' });
+    }
+
+    // Check if account was created with Google without a local password yet
+    if (!user.passwordHash || !user.salt) {
+      return res.status(401).json({
+        error: 'Esta cuenta fue creada con Google. Pulsa "Continuar con Google" para entrar, o utiliza "¿Olvidaste tu contraseña?" para crear una clave.',
+      });
+    }
+
+    const computedHash = crypto
+      .createHash('sha256')
+      .update(password + user.salt)
+      .digest('hex');
+
+    if (computedHash !== user.passwordHash) {
+      return res.status(401).json({ error: 'El correo o la contraseña no son correctos.' });
+    }
+
+    const sessionToken = `rys_sec_${crypto.randomBytes(32).toString('hex')}`;
+    sessionsStore.set(sessionToken, user.id);
+
+    return res.json({
+      success: true,
+      user: sanitizeUser(user),
+      token: sessionToken,
+    });
+  } catch (err: any) {
+    console.error('Error in login:', err);
+    return res.status(500).json({ error: 'Error al procesar el inicio de sesión.' });
+  }
+});
+
+// 2. Auth: Send REAL verification code to user email (con detección de cuentas existentes)
 app.post('/api/auth/send-verification-code', async (req, res) => {
   try {
     const { email, name, password } = req.body;
@@ -104,6 +157,15 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
 
     if (!cleanEmail || !emailRegex.test(cleanEmail)) {
       return res.status(400).json({ error: 'Ingresa una dirección de correo electrónico válida (ej. usuario@dominio.com).' });
+    }
+
+    // Detect if account already exists with password
+    const existing = usersStore.get(cleanEmail);
+    if (existing && existing.passwordHash) {
+      return res.status(409).json({
+        error: 'Ya existe una cuenta registrada con este correo electrónico. Por favor inicia sesión con tu contraseña o recupérala si la has olvidado.',
+        alreadyRegistered: true,
+      });
     }
 
     // Generate secure 6-digit numeric verification code
@@ -151,7 +213,7 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
 
         return res.json({
           success: true,
-          message: `Código enviado con éxito a ${cleanEmail}.`,
+          message: `Código enviado con éxito a ${cleanEmail}. Revisa tu bandeja de entrada.`,
         });
       } catch (err: any) {
         console.error('Error enviando correo SMTP:', err);
@@ -160,9 +222,8 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
         });
       }
     } else {
-      // Direct instruction to user
       return res.status(400).json({
-        error: 'El servicio de correo no está configurado aún. Para enviar correos reales, configura las variables SMTP_HOST, SMTP_USER y SMTP_PASS en las variables de entorno de la aplicación.',
+        error: 'El servicio de correo saliente (SMTP) no está configurado aún. Configura las variables SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos reales.',
       });
     }
   } catch (error: any) {
@@ -244,7 +305,160 @@ app.post('/api/auth/verify-code', (req, res) => {
   }
 });
 
-// 3. Auth: Real Google OAuth with cryptographic ID token verification
+// 3. Auth: Solicitar recuperación de contraseña (código real a correo)
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const cleanEmail = email?.trim().toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Ingresa un correo electrónico con formato válido.' });
+    }
+
+    const user = usersStore.get(cleanEmail);
+    if (!user) {
+      return res.status(404).json({ error: 'No encontramos ninguna cuenta registrada con este correo electrónico.' });
+    }
+
+    const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    passwordResetStore.set(cleanEmail, { code, expiresAt, email: cleanEmail });
+
+    const mailer = getMailer();
+    if (mailer) {
+      try {
+        await mailer.sendMail({
+          from: process.env.EMAIL_FROM || '"Reborn Your Style" <no-reply@rebornyourstyle.com>',
+          to: cleanEmail,
+          subject: `${code} es tu código para restablecer tu contraseña - Reborn Your Style`,
+          html: `
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #fef8f3; color: #1d1b19; border-radius: 12px; border: 1px solid #e6e2dd;">
+              <h2 style="font-family: Georgia, serif; color: #032517; font-size: 26px; margin-bottom: 8px;">Reborn Your Style</h2>
+              <p style="color: #486548; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0;">Recuperación de Contraseña</p>
+              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+              <p style="font-size: 16px; line-height: 1.6;">Hola <strong>${user.name}</strong>,</p>
+              <p style="font-size: 15px; line-height: 1.6;">Hemos recibido una solicitud para cambiar la contraseña de tu cuenta en Reborn Your Style. Tu código de recuperación confidencial es:</p>
+              <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
+                ${code}
+              </div>
+              <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código de un solo uso es válido por 10 minutos. Si no realizaste esta solicitud, puedes ignorar este correo; tu cuenta permanece segura.</p>
+              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+              <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
+            </div>
+          `,
+        });
+
+        return res.json({
+          success: true,
+          message: `Código de recuperación enviado con éxito a ${cleanEmail}. Revisa tu bandeja de entrada.`,
+        });
+      } catch (err: any) {
+        console.error('Error enviando correo SMTP:', err);
+        return res.status(500).json({
+          error: 'No se pudo enviar el correo de recuperación. Verifica las credenciales SMTP en los ajustes del proyecto.',
+        });
+      }
+    } else {
+      return res.status(400).json({
+        error: 'El servicio de correo saliente (SMTP) no está configurado aún. Configura las variables SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos reales.',
+      });
+    }
+  } catch (error: any) {
+    console.error('Error in forgot-password:', error);
+    res.status(500).json({ error: 'Error al procesar la solicitud de recuperación.' });
+  }
+});
+
+// 4. Auth: Verificar código de recuperación de contraseña
+app.post('/api/auth/verify-reset-code', (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: 'El correo y el código son obligatorios.' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const entry = passwordResetStore.get(cleanEmail);
+
+    if (!entry) {
+      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación pendiente para este correo. Solicita un código nuevo.' });
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      passwordResetStore.delete(cleanEmail);
+      return res.status(400).json({ error: 'El código de recuperación ha expirado. Por favor solicita uno nuevo.' });
+    }
+
+    if (entry.code !== code.trim()) {
+      return res.status(400).json({ error: 'El código de recuperación no es correcto. Verifica los 6 dígitos recibidos.' });
+    }
+
+    return res.json({ success: true, message: 'Código verificado correctamente.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al verificar el código.' });
+  }
+});
+
+// 5. Auth: Restablecer contraseña con código validado
+app.post('/api/auth/reset-password', (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Todos los campos son obligatorios.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const entry = passwordResetStore.get(cleanEmail);
+
+    if (!entry) {
+      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación pendiente para este correo. Solicita uno nuevo.' });
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      passwordResetStore.delete(cleanEmail);
+      return res.status(400).json({ error: 'El código ha expirado. Solicita uno nuevo.' });
+    }
+
+    if (entry.code !== code.trim()) {
+      return res.status(400).json({ error: 'El código de recuperación no es correcto.' });
+    }
+
+    const user = usersStore.get(cleanEmail);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = crypto.createHash('sha256').update(newPassword + salt).digest('hex');
+
+    user.passwordHash = passwordHash;
+    user.salt = salt;
+    user.isVerified = true;
+    usersStore.set(cleanEmail, user);
+
+    passwordResetStore.delete(cleanEmail);
+
+    const sessionToken = `rys_sec_${crypto.randomBytes(32).toString('hex')}`;
+    sessionsStore.set(sessionToken, user.id);
+
+    return res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente.',
+      user: sanitizeUser(user),
+      token: sessionToken,
+    });
+  } catch (err: any) {
+    console.error('Error in reset-password:', err);
+    return res.status(500).json({ error: 'Error al restablecer la contraseña.' });
+  }
+});
+
+// 6. Auth: Real Google OAuth with cryptographic ID token verification
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { credential } = req.body;
@@ -321,6 +535,37 @@ app.post('/api/auth/logout', (req, res) => {
     sessionsStore.delete(token);
   }
   res.json({ success: true, message: 'Sesión cerrada exitosamente.' });
+});
+
+// 5. Auth: Verificar sesión activa (me)
+app.get('/api/auth/me', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const userId = req.headers['x-user-id'] as string;
+
+  let targetUser: ServerUser | undefined;
+
+  if (token && sessionsStore.has(token)) {
+    const sessionUserId = sessionsStore.get(token);
+    for (const u of usersStore.values()) {
+      if (u.id === sessionUserId) {
+        targetUser = u;
+        break;
+      }
+    }
+  } else if (userId) {
+    for (const u of usersStore.values()) {
+      if (u.id === userId) {
+        targetUser = u;
+        break;
+      }
+    }
+  }
+
+  if (!targetUser) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  return res.json({ success: true, user: sanitizeUser(targetUser) });
 });
 
 // 5. User Profile: Retrieve, Update, and Delete (STRICTLY PRIVATE to own account)
