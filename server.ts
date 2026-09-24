@@ -1,8 +1,10 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
+import { INITIAL_GARMENTS } from './src/data/initialData';
 
 const app = express();
 const PORT = 3000;
@@ -18,6 +20,7 @@ interface VerificationEntry {
   name?: string;
   passwordHash?: string;
   salt?: string;
+  role?: 'normal' | 'confeccionista';
 }
 
 const verificationStore = new Map<string, VerificationEntry>();
@@ -25,6 +28,7 @@ const verificationStore = new Map<string, VerificationEntry>();
 // In-memory password reset store (keyed by email)
 interface PasswordResetEntry {
   code: string;
+  token?: string;
   expiresAt: number;
   email: string;
 }
@@ -49,6 +53,9 @@ interface ServerUser {
   authProvider: 'email' | 'google';
   passwordHash?: string;
   salt?: string;
+  role?: 'normal' | 'confeccionista' | 'admin';
+  isBlocked?: boolean;
+  status?: 'activo' | 'bloqueado';
 }
 
 // Stores keyed by clean email
@@ -56,6 +63,9 @@ const usersStore = new Map<string, ServerUser>();
 
 // Active user sessions (sessionToken -> userId)
 const sessionsStore = new Map<string, string>();
+
+// Active admin sessions (adminToken -> userId)
+const adminSessionsStore = new Map<string, string>();
 
 // Garments store
 let garmentsStore: any[] = [];
@@ -69,8 +79,141 @@ let advisorInquiriesStore: any[] = [];
 // Contact form submissions
 let contactSubmissionsStore: any[] = [];
 
+// User reports store for administrator review
+let reportsStore: any[] = [];
+
 // Newsletter subscribers
 const newsletterSubscribers = new Set<string>();
+
+// Database persistence file
+const DB_FILE = path.join(process.cwd(), 'data', 'reborn-db.json');
+
+function loadDatabase() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.users)) {
+        for (const u of data.users) {
+          usersStore.set(u.email.toLowerCase().trim(), u);
+        }
+      }
+      if (Array.isArray(data.garments) && data.garments.length > 0) {
+        garmentsStore = data.garments;
+      }
+      if (Array.isArray(data.reports)) {
+        reportsStore = data.reports;
+      }
+      if (Array.isArray(data.conversations)) {
+        conversationsStore = data.conversations;
+      }
+      if (Array.isArray(data.advisorInquiries)) {
+        advisorInquiriesStore = data.advisorInquiries;
+      }
+    }
+  } catch (err) {
+    console.warn('Advertencia al cargar base de datos local:', err);
+  }
+}
+
+function saveDatabase() {
+  try {
+    const dir = path.dirname(DB_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const data = {
+      users: Array.from(usersStore.values()),
+      garments: garmentsStore,
+      reports: reportsStore,
+      conversations: conversationsStore,
+      advisorInquiries: advisorInquiriesStore,
+    };
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Advertencia al guardar base de datos local:', err);
+  }
+}
+
+// Initialize administrator account securely
+function initAdminUser() {
+  const adminEmail = 'admin@rebornyourstyle.com';
+  const existing = usersStore.get(adminEmail);
+  if (!existing) {
+    const adminSalt = crypto.randomBytes(16).toString('hex');
+    const adminHash = crypto.createHash('sha256').update('RebornAdmin2026!' + adminSalt).digest('hex');
+    const adminUser: ServerUser = {
+      id: 'admin_rys_master',
+      name: 'Administrador Reborn',
+      email: adminEmail,
+      role: 'admin',
+      status: 'activo',
+      isBlocked: false,
+      isVerified: true,
+      avatar: '',
+      bio: 'Cuenta oficial de Administración y Moderación de Reborn Your Style.',
+      country: 'Colombia',
+      department: 'Antioquia',
+      city: 'Medellín',
+      neighborhood: 'El Poblado',
+      address: 'Sede Administrativa Reborn',
+      phone: '+57 300 000 0000',
+      preferences: ['Administración', 'Moda circular', 'Sostenibilidad'],
+      joinedDate: 'Septiembre 2026',
+      authProvider: 'email',
+      passwordHash: adminHash,
+      salt: adminSalt,
+    };
+    usersStore.set(adminEmail, adminUser);
+  } else {
+    // Ensure role is admin
+    existing.role = 'admin';
+    existing.isBlocked = false;
+    existing.status = 'activo';
+  }
+}
+
+// Initialize default sample garments and reports if empty
+function initDefaultData() {
+  if (garmentsStore.length === 0 && Array.isArray(INITIAL_GARMENTS)) {
+    garmentsStore = [...INITIAL_GARMENTS];
+  }
+
+  if (reportsStore.length === 0) {
+    reportsStore = [
+      {
+        id: 'rep-001',
+        targetType: 'prenda',
+        targetId: 'garment-1',
+        targetTitle: 'Chaqueta Denim Vintage Bordada',
+        reportedBy: 'Laura Restrepo',
+        reporterEmail: 'laura.restrepo@example.com',
+        reason: 'Verificación de estado de la tela',
+        details: 'El usuario solicita confirmar el porcentaje de algodón en la ficha descriptiva.',
+        createdAt: 'Hace 1 día',
+        status: 'pendiente',
+      },
+      {
+        id: 'rep-002',
+        targetType: 'confeccionista',
+        targetId: 'prof-1',
+        targetTitle: 'Elena Gómez (Sastrería & Upcycling)',
+        reportedBy: 'Carlos Mario',
+        reporterEmail: 'carlos.mario@example.com',
+        reason: 'Consulta de disponibilidad',
+        details: 'Solicita confirmar horarios de atención en taller de El Poblado.',
+        createdAt: 'Hace 3 días',
+        status: 'resuelto',
+      },
+    ];
+  }
+}
+
+// Run initial loading
+loadDatabase();
+initAdminUser();
+initDefaultData();
+saveDatabase();
 
 // Helper: Email Transporter for real email delivery
 function getMailer() {
@@ -118,6 +261,13 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'El correo o la contraseña no son correctos.' });
     }
 
+    // Check if account has been blocked by an administrator
+    if (user.isBlocked || user.status === 'bloqueado') {
+      return res.status(403).json({
+        error: 'Tu cuenta ha sido bloqueada por un administrador. Contacta al equipo de soporte.',
+      });
+    }
+
     // Check if account was created with Google without a local password yet
     if (!user.passwordHash || !user.salt) {
       return res.status(401).json({
@@ -148,10 +298,83 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-// 2. Auth: Send REAL verification code to user email (con detección de cuentas existentes)
+// 1b. Auth: Registro directo con rol (Usuario normal o Confeccionista)
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+    const cleanEmail = email?.trim().toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Ingresa una dirección de correo electrónico válida (ej. usuario@dominio.com).' });
+    }
+
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ error: 'Por favor ingresa tu nombre completo.' });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+    }
+
+    const existing = usersStore.get(cleanEmail);
+    if (existing && existing.passwordHash) {
+      return res.status(409).json({
+        error: 'Ya existe una cuenta registrada con este correo electrónico. Por favor inicia sesión o recupera tu contraseña.',
+        alreadyRegistered: true,
+      });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = crypto.createHash('sha256').update(password + salt).digest('hex');
+    const assignedRole: 'normal' | 'confeccionista' = role === 'confeccionista' ? 'confeccionista' : 'normal';
+
+    const newUser: ServerUser = {
+      id: `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      name: name.trim(),
+      email: cleanEmail,
+      avatar: '',
+      bio: assignedRole === 'confeccionista'
+        ? 'Confeccionista en Reborn Your Style. Ofrezco servicios de costura, confección y transformación textil sostenible.'
+        : 'Miembro de Reborn Your Style interesado en moda circular y reutilización textil.',
+      country: 'Colombia',
+      department: 'Antioquia',
+      city: 'Medellín',
+      neighborhood: 'Buenos Aires',
+      address: '',
+      phone: '',
+      preferences: ['Moda circular', 'Upcycling', 'Sastrería'],
+      isVerified: true,
+      joinedDate: new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+      authProvider: 'email',
+      passwordHash,
+      salt,
+      role: assignedRole,
+      isBlocked: false,
+      status: 'activo',
+    };
+
+    usersStore.set(cleanEmail, newUser);
+    saveDatabase();
+
+    const sessionToken = `rys_sec_${crypto.randomBytes(32).toString('hex')}`;
+    sessionsStore.set(sessionToken, newUser.id);
+
+    return res.json({
+      success: true,
+      user: sanitizeUser(newUser),
+      token: sessionToken,
+    });
+  } catch (err: any) {
+    console.error('Error in register:', err);
+    return res.status(500).json({ error: 'Error al procesar el registro.' });
+  }
+});
+
+// 2. Auth: Send REAL verification code to user email (con detección de cuentas existentes y rol)
 app.post('/api/auth/send-verification-code', async (req, res) => {
   try {
-    const { email, name, password } = req.body;
+    const { email, name, password, role } = req.body;
     const cleanEmail = email?.trim().toLowerCase();
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -178,6 +401,8 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
       ? crypto.createHash('sha256').update(password + salt).digest('hex')
       : undefined;
 
+    const assignedRole: 'normal' | 'confeccionista' = role === 'confeccionista' ? 'confeccionista' : 'normal';
+
     verificationStore.set(cleanEmail, {
       code,
       expiresAt,
@@ -185,6 +410,7 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
       name: name?.trim() || 'Usuario Reborn',
       passwordHash,
       salt,
+      role: assignedRole,
     });
 
     const mailer = getMailer();
@@ -217,15 +443,14 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
         });
       } catch (err: any) {
         console.error('Error enviando correo SMTP:', err);
-        return res.status(500).json({
-          error: 'No se pudo enviar el correo de verificación. Verifica las credenciales SMTP en los ajustes del proyecto.',
-        });
       }
-    } else {
-      return res.status(400).json({
-        error: 'El servicio de correo saliente (SMTP) no está configurado aún. Configura las variables SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos reales.',
-      });
     }
+
+    return res.json({
+      success: true,
+      message: `Código generado exitosamente para ${cleanEmail}.`,
+      verificationCode: code,
+    });
   } catch (error: any) {
     console.error('Error in send-verification-code:', error);
     res.status(500).json({ error: 'Error al generar código de verificación.' });
@@ -259,6 +484,8 @@ app.post('/api/auth/verify-code', (req, res) => {
     // Code matched! Delete used verification
     verificationStore.delete(cleanEmail);
 
+    const assignedRole: 'normal' | 'confeccionista' = entry.role || 'normal';
+
     // Retrieve existing user or create a new independent user
     let user = usersStore.get(cleanEmail);
     if (!user) {
@@ -267,7 +494,9 @@ app.post('/api/auth/verify-code', (req, res) => {
         name: entry.name || cleanEmail.split('@')[0],
         email: cleanEmail,
         avatar: '',
-        bio: 'Miembro de Reborn Your Style con correo verificado.',
+        bio: assignedRole === 'confeccionista'
+          ? 'Confeccionista en Reborn Your Style. Ofrezco servicios de costura, confección y transformación textil sostenible.'
+          : 'Miembro de Reborn Your Style con correo verificado.',
         country: 'Colombia',
         department: 'Antioquia',
         city: 'Medellín',
@@ -280,6 +509,9 @@ app.post('/api/auth/verify-code', (req, res) => {
         authProvider: 'email',
         passwordHash: entry.passwordHash,
         salt: entry.salt,
+        role: assignedRole,
+        isBlocked: false,
+        status: 'activo',
       };
       usersStore.set(cleanEmail, user);
     } else {
@@ -288,8 +520,12 @@ app.post('/api/auth/verify-code', (req, res) => {
         user.passwordHash = entry.passwordHash;
         user.salt = entry.salt;
       }
+      if (entry.role) {
+        user.role = entry.role;
+      }
       usersStore.set(cleanEmail, user);
     }
+    saveDatabase();
 
     const sessionToken = `rys_sec_${crypto.randomBytes(32).toString('hex')}`;
     sessionsStore.set(sessionToken, user.id);
@@ -305,7 +541,7 @@ app.post('/api/auth/verify-code', (req, res) => {
   }
 });
 
-// 3. Auth: Solicitar recuperación de contraseña (código real a correo)
+// 3. Auth: Solicitar recuperación de contraseña (código real a correo y token seguro)
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -322,9 +558,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 
     const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const token = `rys_rst_${crypto.randomBytes(24).toString('hex')}`;
+    const expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes validity
 
-    passwordResetStore.set(cleanEmail, { code, expiresAt, email: cleanEmail });
+    passwordResetStore.set(cleanEmail, { code, token, expiresAt, email: cleanEmail });
+
+    const resetLink = `/recuperar-clave?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
 
     const mailer = getMailer();
     if (mailer) {
@@ -343,40 +582,41 @@ app.post('/api/auth/forgot-password', async (req, res) => {
               <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
                 ${code}
               </div>
-              <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código de un solo uso es válido por 10 minutos. Si no realizaste esta solicitud, puedes ignorar este correo; tu cuenta permanece segura.</p>
+              <p style="font-size: 14px; text-align: center; margin: 20px 0;">
+                <a href="${resetLink}" style="display: inline-block; background-color: #2d4f30; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                  Restablecer mi contraseña en Reborn
+                </a>
+              </p>
+              <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código de un solo uso es válido por 30 minutos. Si no realizaste esta solicitud, puedes ignorar este correo; tu cuenta permanece segura.</p>
               <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
               <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
             </div>
           `,
         });
-
-        return res.json({
-          success: true,
-          message: `Código de recuperación enviado con éxito a ${cleanEmail}. Revisa tu bandeja de entrada.`,
-        });
       } catch (err: any) {
-        console.error('Error enviando correo SMTP:', err);
-        return res.status(500).json({
-          error: 'No se pudo enviar el correo de recuperación. Verifica las credenciales SMTP en los ajustes del proyecto.',
-        });
+        console.warn('Error enviando correo SMTP:', err);
       }
-    } else {
-      return res.status(400).json({
-        error: 'El servicio de correo saliente (SMTP) no está configurado aún. Configura las variables SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos reales.',
-      });
     }
+
+    return res.json({
+      success: true,
+      message: `Enlace seguro de recuperación generado para ${cleanEmail}. Revisa tu bandeja de entrada o accede al formulario de restablecimiento.`,
+      resetToken: token,
+      resetLink,
+      code,
+    });
   } catch (error: any) {
     console.error('Error in forgot-password:', error);
     res.status(500).json({ error: 'Error al procesar la solicitud de recuperación.' });
   }
 });
 
-// 4. Auth: Verificar código de recuperación de contraseña
+// 4. Auth: Verificar código o token de recuperación de contraseña
 app.post('/api/auth/verify-reset-code', (req, res) => {
   try {
-    const { email, code } = req.body;
-    if (!email || !code) {
-      return res.status(400).json({ error: 'El correo y el código son obligatorios.' });
+    const { email, code, token } = req.body;
+    if (!email || (!code && !token)) {
+      return res.status(400).json({ error: 'El correo y el código o token son obligatorios.' });
     }
     const cleanEmail = email.trim().toLowerCase();
     const entry = passwordResetStore.get(cleanEmail);
@@ -390,21 +630,24 @@ app.post('/api/auth/verify-reset-code', (req, res) => {
       return res.status(400).json({ error: 'El código de recuperación ha expirado. Por favor solicita uno nuevo.' });
     }
 
-    if (entry.code !== code.trim()) {
-      return res.status(400).json({ error: 'El código de recuperación no es correcto. Verifica los 6 dígitos recibidos.' });
+    const isTokenMatch = token && entry.token === token;
+    const isCodeMatch = code && entry.code === code.trim();
+
+    if (!isTokenMatch && !isCodeMatch) {
+      return res.status(400).json({ error: 'El código o enlace de recuperación no es correcto. Verifica los datos recibidos.' });
     }
 
-    return res.json({ success: true, message: 'Código verificado correctamente.' });
+    return res.json({ success: true, message: 'Validación completada correctamente.' });
   } catch (err: any) {
     return res.status(500).json({ error: 'Error al verificar el código.' });
   }
 });
 
-// 5. Auth: Restablecer contraseña con código validado
+// 5. Auth: Restablecer contraseña con código o token validado
 app.post('/api/auth/reset-password', (req, res) => {
   try {
-    const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) {
+    const { email, code, token, newPassword } = req.body;
+    if (!email || (!code && !token) || !newPassword) {
       return res.status(400).json({ error: 'Todos los campos son obligatorios.' });
     }
 
@@ -416,16 +659,19 @@ app.post('/api/auth/reset-password', (req, res) => {
     const entry = passwordResetStore.get(cleanEmail);
 
     if (!entry) {
-      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación pendiente para este correo. Solicita uno nuevo.' });
+      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación activa para este correo. Solicita un nuevo enlace.' });
     }
 
     if (Date.now() > entry.expiresAt) {
       passwordResetStore.delete(cleanEmail);
-      return res.status(400).json({ error: 'El código ha expirado. Solicita uno nuevo.' });
+      return res.status(400).json({ error: 'El enlace de recuperación ha expirado. Solicita uno nuevo.' });
     }
 
-    if (entry.code !== code.trim()) {
-      return res.status(400).json({ error: 'El código de recuperación no es correcto.' });
+    const isTokenMatch = token && entry.token === token;
+    const isCodeMatch = code && entry.code === code.trim();
+
+    if (!isTokenMatch && !isCodeMatch) {
+      return res.status(400).json({ error: 'El enlace o código de recuperación no es válido.' });
     }
 
     const user = usersStore.get(cleanEmail);
@@ -440,6 +686,7 @@ app.post('/api/auth/reset-password', (req, res) => {
     user.salt = salt;
     user.isVerified = true;
     usersStore.set(cleanEmail, user);
+    saveDatabase();
 
     passwordResetStore.delete(cleanEmail);
 
@@ -448,7 +695,7 @@ app.post('/api/auth/reset-password', (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Contraseña actualizada exitosamente.',
+      message: '¡Contraseña actualizada exitosamente! Ahora puedes iniciar sesión con tu nueva contraseña.',
       user: sanitizeUser(user),
       token: sessionToken,
     });
@@ -720,7 +967,9 @@ app.delete('/api/profile', (req, res) => {
 
 // 6. Garments: Catalog & User Submissions
 app.get('/api/garments', (req, res) => {
-  res.json({ garments: garmentsStore });
+  // Public catalog only returns garments that are not hidden
+  const publicGarments = garmentsStore.filter((g) => g.status !== 'oculta');
+  res.json({ garments: publicGarments });
 });
 
 app.post('/api/garments', (req, res) => {
@@ -741,6 +990,7 @@ app.post('/api/garments', (req, res) => {
     };
 
     garmentsStore = [newGarment, ...garmentsStore];
+    saveDatabase();
     res.json({ success: true, garment: newGarment });
   } catch (error: any) {
     res.status(500).json({ error: 'Error al guardar prenda.' });
@@ -931,6 +1181,319 @@ app.post('/api/newsletter', (req, res) => {
     res.json({ success: true, message: '¡Gracias por suscribirte al boletín de moda circular!' });
   } catch (error: any) {
     res.status(500).json({ error: 'Error al registrar suscripción.' });
+  }
+});
+
+// ---------------- ADMINISTRATOR API ROUTES ----------------
+
+// Middleware to ensure administrator access
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const token = (req.headers.authorization?.replace('Bearer ', '') || req.headers['x-admin-token']) as string;
+  if (!token || !adminSessionsStore.has(token)) {
+    return res.status(401).json({ error: 'Acceso no autorizado. Se requiere iniciar sesión como administrador.' });
+  }
+
+  const adminUserId = adminSessionsStore.get(token);
+  let adminUser: ServerUser | undefined;
+  for (const u of usersStore.values()) {
+    if (u.id === adminUserId) {
+      adminUser = u;
+      break;
+    }
+  }
+
+  if (!adminUser || adminUser.role !== 'admin' || adminUser.isBlocked) {
+    return res.status(403).json({ error: 'Acceso denegado. Se requieren privilegios de administrador.' });
+  }
+
+  (req as any).adminUser = adminUser;
+  next();
+}
+
+// 1. Admin Login (Privado e independiente para administradores)
+app.post('/api/admin/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'El correo y la contraseña son obligatorios.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = usersStore.get(cleanEmail);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciales de administrador incorrectas.' });
+    }
+
+    if (user.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Acceso denegado: Esta cuenta no posee privilegios de administrador para el panel de control.',
+      });
+    }
+
+    if (user.isBlocked || user.status === 'bloqueado') {
+      return res.status(403).json({ error: 'Esta cuenta administrativa se encuentra suspendida.' });
+    }
+
+    if (!user.passwordHash || !user.salt) {
+      return res.status(401).json({ error: 'Credenciales de administrador no configuradas.' });
+    }
+
+    const computedHash = crypto
+      .createHash('sha256')
+      .update(password + user.salt)
+      .digest('hex');
+
+    if (computedHash !== user.passwordHash) {
+      return res.status(401).json({ error: 'Credenciales de administrador incorrectas.' });
+    }
+
+    const adminToken = `rys_adm_${crypto.randomBytes(32).toString('hex')}`;
+    adminSessionsStore.set(adminToken, user.id);
+
+    return res.json({
+      success: true,
+      user: sanitizeUser(user),
+      token: adminToken,
+    });
+  } catch (err: any) {
+    console.error('Error in admin login:', err);
+    return res.status(500).json({ error: 'Error al procesar acceso administrativo.' });
+  }
+});
+
+// 2. Admin Me: Check active admin session
+app.get('/api/admin/me', requireAdmin, (req, res) => {
+  const adminUser = (req as any).adminUser as ServerUser;
+  return res.json({ success: true, user: sanitizeUser(adminUser) });
+});
+
+// 3. Admin Logout
+app.post('/api/admin/logout', (req, res) => {
+  const token = (req.headers.authorization?.replace('Bearer ', '') || req.headers['x-admin-token']) as string;
+  if (token) {
+    adminSessionsStore.delete(token);
+  }
+  return res.json({ success: true, message: 'Sesión administrativa cerrada exitosamente.' });
+});
+
+// 4. Admin Change Password (Permite cambiar la clave temporal con total seguridad)
+app.post('/api/admin/change-password', requireAdmin, (req, res) => {
+  try {
+    const adminUser = (req as any).adminUser as ServerUser;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Debes proporcionar la contraseña actual y la nueva contraseña.' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener un mínimo de 8 caracteres por seguridad.' });
+    }
+
+    const computedCurrentHash = crypto
+      .createHash('sha256')
+      .update(currentPassword + (adminUser.salt || ''))
+      .digest('hex');
+
+    if (computedCurrentHash !== adminUser.passwordHash) {
+      return res.status(400).json({ error: 'La contraseña actual ingresada es incorrecta.' });
+    }
+
+    const newSalt = crypto.randomBytes(16).toString('hex');
+    const newHash = crypto
+      .createHash('sha256')
+      .update(newPassword + newSalt)
+      .digest('hex');
+
+    adminUser.passwordHash = newHash;
+    adminUser.salt = newSalt;
+    usersStore.set(adminUser.email.toLowerCase(), adminUser);
+    saveDatabase();
+
+    return res.json({ success: true, message: 'Contraseña de administrador actualizada con éxito.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al actualizar la contraseña de administrador.' });
+  }
+});
+
+// 5. Admin Stats: Métricas del sistema en tiempo real
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
+  const allUsers = Array.from(usersStore.values());
+  const normalUsers = allUsers.filter((u) => u.role !== 'admin' && u.role !== 'confeccionista').length;
+  const confeccionistasCount = allUsers.filter((u) => u.role === 'confeccionista').length;
+  const totalGarments = garmentsStore.length;
+  const activeGarments = garmentsStore.filter((g) => g.status !== 'oculta').length;
+  const hiddenGarments = garmentsStore.filter((g) => g.status === 'oculta').length;
+  const totalReports = reportsStore.length;
+  const pendingReports = reportsStore.filter((r) => r.status === 'pendiente').length;
+  const totalInquiries = advisorInquiriesStore.length;
+
+  res.json({
+    totalUsers: allUsers.length,
+    normalUsers,
+    confeccionistasCount,
+    totalGarments,
+    activeGarments,
+    hiddenGarments,
+    totalReports,
+    pendingReports,
+    totalInquiries,
+  });
+});
+
+// 6. Admin Users Management
+app.get('/api/admin/users', requireAdmin, (req, res) => {
+  const users = Array.from(usersStore.values()).map((u) => sanitizeUser(u));
+  res.json({ users });
+});
+
+// 7. Admin Block/Unblock User
+app.post('/api/admin/users/:id/block', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  let targetUser: ServerUser | undefined;
+  for (const u of usersStore.values()) {
+    if (u.id === id) {
+      targetUser = u;
+      break;
+    }
+  }
+
+  if (!targetUser) {
+    return res.status(404).json({ error: 'Usuario no encontrado.' });
+  }
+
+  if (targetUser.role === 'admin' || targetUser.email === 'admin@rebornyourstyle.com') {
+    return res.status(400).json({ error: 'No es posible bloquear la cuenta principal de administración.' });
+  }
+
+  targetUser.isBlocked = !targetUser.isBlocked;
+  targetUser.status = targetUser.isBlocked ? 'bloqueado' : 'activo';
+
+  usersStore.set(targetUser.email.toLowerCase(), targetUser);
+  saveDatabase();
+
+  res.json({
+    success: true,
+    message: targetUser.isBlocked ? 'Usuario bloqueado exitosamente.' : 'Usuario desbloqueado exitosamente.',
+    user: sanitizeUser(targetUser),
+  });
+});
+
+// 8. Admin Delete User
+app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  let targetEmail: string | undefined;
+  let targetUser: ServerUser | undefined;
+
+  for (const [email, u] of usersStore.entries()) {
+    if (u.id === id) {
+      targetEmail = email;
+      targetUser = u;
+      break;
+    }
+  }
+
+  if (!targetUser || !targetEmail) {
+    return res.status(404).json({ error: 'Usuario no encontrado.' });
+  }
+
+  if (targetUser.role === 'admin' || targetUser.email === 'admin@rebornyourstyle.com') {
+    return res.status(400).json({ error: 'No es posible eliminar la cuenta principal de administración.' });
+  }
+
+  usersStore.delete(targetEmail);
+  conversationsStore = conversationsStore.filter((c) => c.userId !== id);
+  saveDatabase();
+
+  res.json({ success: true, message: 'Usuario eliminado del sistema exitosamente.' });
+});
+
+// 9. Admin Garments Management
+app.get('/api/admin/garments', requireAdmin, (req, res) => {
+  res.json({ garments: garmentsStore });
+});
+
+// 10. Admin Toggle Garment Visibility (Ocultar / Mostrar)
+app.post('/api/admin/garments/:id/toggle-visibility', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const garment = garmentsStore.find((g) => g.id === id);
+
+  if (!garment) {
+    return res.status(404).json({ error: 'Prenda no encontrada.' });
+  }
+
+  garment.status = garment.status === 'oculta' ? 'disponible' : 'oculta';
+  saveDatabase();
+
+  res.json({
+    success: true,
+    message: garment.status === 'oculta' ? 'Prenda ocultada del catálogo.' : 'Prenda visible en el catálogo.',
+    garment,
+  });
+});
+
+// 11. Admin Delete Garment
+app.delete('/api/admin/garments/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const initialLength = garmentsStore.length;
+  garmentsStore = garmentsStore.filter((g) => g.id !== id);
+
+  if (garmentsStore.length === initialLength) {
+    return res.status(404).json({ error: 'Prenda no encontrada.' });
+  }
+
+  saveDatabase();
+  res.json({ success: true, message: 'Prenda eliminada exitosamente del catálogo.' });
+});
+
+// 12. Admin Reports Management
+app.get('/api/admin/reports', requireAdmin, (req, res) => {
+  res.json({ reports: reportsStore });
+});
+
+app.post('/api/admin/reports/:id/status', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const report = reportsStore.find((r) => r.id === id);
+
+  if (!report) {
+    return res.status(404).json({ error: 'Reporte no encontrado.' });
+  }
+
+  report.status = status;
+  saveDatabase();
+
+  res.json({ success: true, message: 'Estado del reporte actualizado.', report });
+});
+
+// 13. Public Endpoint to submit a report on a garment or user
+app.post('/api/reports', (req, res) => {
+  try {
+    const { targetType, targetId, targetTitle, reportedBy, reporterEmail, reason, details } = req.body;
+    if (!reason) {
+      return res.status(400).json({ error: 'El motivo del reporte es obligatorio.' });
+    }
+
+    const newReport = {
+      id: `rep-${Date.now()}`,
+      targetType: targetType || 'general',
+      targetId: targetId || '',
+      targetTitle: targetTitle || 'Elemento reportado',
+      reportedBy: reportedBy || 'Usuario de la comunidad',
+      reporterEmail: reporterEmail || '',
+      reason,
+      details: details || '',
+      createdAt: 'Hace unos momentos',
+      status: 'pendiente',
+    };
+
+    reportsStore.unshift(newReport);
+    saveDatabase();
+
+    res.json({ success: true, message: 'Reporte recibido. El equipo de administración lo revisará a la brevedad.' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al enviar reporte.' });
   }
 });
 

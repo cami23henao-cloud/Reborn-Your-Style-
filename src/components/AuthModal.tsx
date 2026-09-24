@@ -21,6 +21,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'normal' | 'confeccionista'>('normal');
 
   // Verification code
   const [verificationCode, setVerificationCode] = useState('');
@@ -325,6 +326,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           email: cleanEmail,
           name: name.trim(),
           password,
+          role: selectedRole,
         }),
       });
 
@@ -481,14 +483,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#fef8f3] w-full max-w-md rounded-3xl shadow-2xl border border-[#e6e2dd] overflow-hidden">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#e5decb] overflow-hidden">
         {/* Header */}
-        <div className="p-6 pb-4 border-b border-[#e6e2dd] flex items-center justify-between bg-[#f8f3ee]">
+        <div className="p-6 pb-4 border-b border-[#e5decb] flex items-center justify-between bg-[#f5f0e6]/50">
           <div>
-            <span className="text-[11px] uppercase tracking-wider font-bold text-[#486548] block">
+            <span className="text-[11px] uppercase tracking-wider font-bold text-[#2e4c2c] block">
               Acceso Seguro
             </span>
-            <h2 className="text-xl font-normal font-['Bodoni_Moda',serif] text-[#032517]">
+            <h2 className="text-xl font-bold font-['Outfit',sans-serif] text-[#0f291e]">
               {mode === 'forgot'
                 ? step === 'verify'
                   ? 'Nueva Contraseña'
@@ -503,7 +505,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           <button
             id="btn-close-auth-modal"
             onClick={onClose}
-            className="p-2 rounded-full text-[#424843] hover:text-[#032517] hover:bg-[#e6e2dd] transition-colors"
+            className="p-2 rounded-full text-[#64748b] hover:text-[#0f291e] hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -511,7 +513,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
         {/* Tab switch if on form step & not forgot */}
         {mode !== 'forgot' && step === 'form' && (
-          <div className="flex border-b border-[#e6e2dd] bg-[#f8f3ee]/50 text-xs font-semibold">
+          <div className="flex border-b border-[#e5decb] bg-[#faf8f5] text-xs font-semibold">
             <button
               id="modal-tab-login"
               type="button"
@@ -522,8 +524,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               }}
               className={`flex-1 py-3 text-center transition-colors border-b-2 ${
                 mode === 'login'
-                  ? 'border-[#032517] text-[#032517] bg-[#fef8f3]'
-                  : 'border-transparent text-[#727973] hover:text-[#032517]'
+                  ? 'border-[#9bb593] text-[#1c2e1b] font-bold bg-white'
+                  : 'border-transparent text-[#64748b] hover:text-[#0f291e]'
               }`}
             >
               Iniciar sesión
@@ -538,8 +540,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               }}
               className={`flex-1 py-3 text-center transition-colors border-b-2 ${
                 mode === 'register'
-                  ? 'border-[#032517] text-[#032517] bg-[#fef8f3]'
-                  : 'border-transparent text-[#727973] hover:text-[#032517]'
+                  ? 'border-[#9bb593] text-[#1c2e1b] font-bold bg-white'
+                  : 'border-transparent text-[#64748b] hover:text-[#0f291e]'
               }`}
             >
               Crear una cuenta
@@ -678,7 +680,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 id="modal-btn-submit-login"
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Iniciar sesión</span>}
               </button>
@@ -750,11 +752,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-[#032517] mb-1.5">
+                  Tipo de cuenta
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('normal')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      selectedRole === 'normal'
+                        ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                        : 'border-[#e6e2dd] bg-white hover:bg-stone-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-[#032517]">Usuario normal</span>
+                      {selectedRole === 'normal' && (
+                        <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-stone-500 leading-tight">
+                      Para renovar prendas y participar en la comunidad.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('confeccionista')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      selectedRole === 'confeccionista'
+                        ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                        : 'border-[#e6e2dd] bg-white hover:bg-stone-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-[#032517]">Confeccionista</span>
+                      {selectedRole === 'confeccionista' && (
+                        <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-stone-500 leading-tight">
+                      Para modistas, costura y transformación textil.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
               <button
                 id="modal-btn-submit-register"
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Continuar y verificar código</span>}
               </button>
@@ -801,7 +850,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 id="modal-btn-confirm-code"
                 type="submit"
                 disabled={loading || verificationCode.length !== 6}
-                className="w-full py-2.5 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Activar y Entrar</span>}
               </button>
@@ -840,7 +889,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Enviar código de recuperación</span>}
               </button>
@@ -911,7 +960,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               <button
                 type="submit"
                 disabled={loading || verificationCode.length !== 6}
-                className="w-full py-2.5 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Guardar contraseña y entrar</span>}
               </button>

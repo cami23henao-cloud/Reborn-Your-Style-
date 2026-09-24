@@ -1,58 +1,58 @@
 @import "tailwindcss";
 
 @theme {
-  --color-surface: #fef8f3;
-  --color-surface-dim: #ded9d4;
-  --color-surface-bright: #fef8f3;
+  --color-surface: #faf8f4;
+  --color-surface-dim: #eee9dc;
+  --color-surface-bright: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f8f3ee;
-  --color-surface-container: #f2ede8;
-  --color-surface-container-high: #ece7e2;
-  --color-surface-container-highest: #e6e2dd;
-  --color-on-surface: #1d1b19;
-  --color-on-surface-variant: #424843;
-  --color-inverse-surface: #32302d;
-  --color-inverse-on-surface: #f5f0eb;
-  --color-outline: #727973;
-  --color-outline-variant: #c1c8c2;
-  --color-surface-tint: #456553;
-  --color-primary: #032517;
+  --color-surface-container-low: #f5f1e8;
+  --color-surface-container: #ede7da;
+  --color-surface-container-high: #e5dfcf;
+  --color-surface-container-highest: #dcd4c3;
+  --color-on-surface: #22251c;
+  --color-on-surface-variant: #525648;
+  --color-inverse-surface: #202716;
+  --color-inverse-on-surface: #f7f9f2;
+  --color-outline: #757367;
+  --color-outline-variant: #d6cfbe;
+  --color-surface-tint: #5b7042;
+  --color-primary: #5b7042;
   --color-on-primary: #ffffff;
-  --color-primary-container: #1b3b2b;
-  --color-on-primary-container: #83a590;
-  --color-inverse-primary: #abcfb8;
-  --color-secondary: #486548;
+  --color-primary-container: #ebf0e4;
+  --color-on-primary-container: #222c15;
+  --color-inverse-primary: #a3ba87;
+  --color-secondary: #6e7f53;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #caecc6;
-  --color-on-secondary-container: #4e6c4d;
-  --color-tertiary: #311a00;
+  --color-secondary-container: #e6edd9;
+  --color-on-secondary-container: #273318;
+  --color-tertiary: #7d7256;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #492f0f;
-  --color-on-tertiary-container: #bd966e;
-  --color-error: #ba1a1a;
+  --color-tertiary-container: #f0ebd9;
+  --color-on-tertiary-container: #2b2515;
+  --color-error: #dc2626;
   --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
-  --color-primary-fixed: #c7ebd4;
-  --color-primary-fixed-dim: #abcfb8;
-  --color-on-primary-fixed: #002113;
-  --color-on-primary-fixed-variant: #2d4d3c;
-  --color-secondary-fixed: #caecc6;
-  --color-secondary-fixed-dim: #aecfab;
-  --color-on-secondary-fixed: #052109;
-  --color-on-secondary-fixed-variant: #314d32;
-  --color-tertiary-fixed: #ffddbb;
-  --color-tertiary-fixed-dim: #e9bf93;
-  --color-on-tertiary-fixed: #2b1700;
-  --color-on-tertiary-fixed-variant: #5e411f;
-  --color-background: #fef8f3;
-  --color-on-background: #1d1b19;
-  --color-surface-variant: #e6e2dd;
+  --color-error-container: #fee2e2;
+  --color-on-error-container: #991b1b;
+  --color-primary-fixed: #dce7ce;
+  --color-primary-fixed-dim: #c1d4ac;
+  --color-on-primary-fixed: #1e2713;
+  --color-on-primary-fixed-variant: #43542f;
+  --color-secondary-fixed: #e6edd9;
+  --color-secondary-fixed-dim: #cad8b7;
+  --color-on-secondary-fixed: #253116;
+  --color-on-secondary-fixed-variant: #4d5c37;
+  --color-tertiary-fixed: #f4efdf;
+  --color-tertiary-fixed-dim: #dfd6be;
+  --color-on-tertiary-fixed: #2b2515;
+  --color-on-tertiary-fixed-variant: #5b513a;
+  --color-background: #faf8f4;
+  --color-on-background: #22251c;
+  --color-surface-variant: #ede8dc;
 
-  --font-display-hero: "Bodoni Moda", serif;
-  --font-headline-lg: "Bodoni Moda", serif;
-  --font-headline-md: "Bodoni Moda", serif;
-  --font-headline-sm: "Bodoni Moda", serif;
+  --font-display-hero: "Outfit", "Plus Jakarta Sans", sans-serif;
+  --font-headline-lg: "Outfit", "Plus Jakarta Sans", sans-serif;
+  --font-headline-md: "Outfit", "Plus Jakarta Sans", sans-serif;
+  --font-headline-sm: "Outfit", "Plus Jakarta Sans", sans-serif;
   --font-title-lg: "Plus Jakarta Sans", sans-serif;
   --font-title-md: "Plus Jakarta Sans", sans-serif;
   --font-body-lg: "Plus Jakarta Sans", sans-serif;
@@ -65,39 +65,41 @@
 
 @layer utilities {
   .text-display-hero {
-    font-size: clamp(36px, 5vw, 56px);
+    font-size: clamp(34px, 4.5vw, 54px);
     line-height: 1.15;
-    letter-spacing: -0.02em;
-    font-weight: 600;
+    letter-spacing: -0.025em;
+    font-weight: 700;
   }
   .text-headline-lg {
-    font-size: clamp(28px, 4vw, 40px);
-    line-height: 1.2;
-    letter-spacing: -0.015em;
-    font-weight: 500;
+    font-size: clamp(26px, 3.5vw, 38px);
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    font-weight: 700;
   }
   .text-headline-md {
-    font-size: 28px;
-    line-height: 36px;
-    font-weight: 500;
+    font-size: 26px;
+    line-height: 34px;
+    letter-spacing: -0.015em;
+    font-weight: 600;
   }
   .text-headline-sm {
-    font-size: 22px;
+    font-size: 20px;
     line-height: 28px;
+    letter-spacing: -0.01em;
     font-weight: 600;
   }
   .text-title-lg {
     font-size: 18px;
-    line-height: 24px;
+    line-height: 26px;
     font-weight: 600;
   }
   .text-title-md {
     font-size: 16px;
-    line-height: 22px;
+    line-height: 24px;
     font-weight: 600;
   }
   .text-body-lg {
-    font-size: 18px;
+    font-size: 17px;
     line-height: 28px;
     font-weight: 400;
   }
@@ -157,9 +159,10 @@
 html, body {
   margin: 0;
   padding: 0;
-  background-color: #fef8f3;
-  color: #1d1b19;
+  background-color: #faf8f4;
+  color: #22251c;
   scroll-behavior: smooth;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
 /* Material symbols outlined styling */
@@ -167,4 +170,3 @@ html, body {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   vertical-align: middle;
 }
-

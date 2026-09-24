@@ -40,16 +40,16 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onOpenPublish }) => {
   ];
 
   return (
-    <section id="como-funciona" className="py-20 lg:py-28 bg-[#f8f3ee] border-b border-[#e6e2dd]">
+    <section id="como-funciona" className="py-20 lg:py-28 bg-[#f5f0e6] border-b border-[#e5decb]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <span className="text-xs uppercase tracking-widest font-bold text-[#486548] block mb-2">
+          <span className="text-xs uppercase tracking-widest font-bold text-[#2e4c2c] block mb-2">
             El Proceso Circular
           </span>
-          <h2 className="text-3xl sm:text-4xl font-normal font-['Bodoni_Moda',serif] text-[#032517]">
+          <h2 className="text-3xl sm:text-4xl font-normal font-['Bodoni_Moda',serif] text-[#1c2e1b]">
             ¿Cómo funciona Reborn Your Style?
           </h2>
-          <p className="mt-4 text-base text-[#424843]">
+          <p className="mt-4 text-base text-[#525648]">
             Un camino simple de 5 pasos para pasar del desuso a una pieza artesanal de autor.
           </p>
         </div>
@@ -60,21 +60,21 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onOpenPublish }) => {
             return (
               <div
                 key={idx}
-                className="bg-[#fef8f3] p-6 rounded-2xl border border-[#e6e2dd] relative flex flex-col justify-between hover:border-[#486548] transition-all hover:shadow-sm"
+                className="bg-white p-6 rounded-2xl border border-[#e5decb] relative flex flex-col justify-between hover:border-[#9bb593] transition-all hover:shadow-md"
               >
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-2xl font-bold font-['Bodoni_Moda',serif] text-[#486548]/40">
+                    <span className="text-2xl font-bold font-['Bodoni_Moda',serif] text-[#9bb593]">
                       {step.num}
                     </span>
-                    <div className="w-10 h-10 rounded-full bg-[#f2ede8] flex items-center justify-center text-[#032517]">
+                    <div className="w-10 h-10 rounded-full bg-[#eaf2e8] border border-[#c2d6be] flex items-center justify-center text-[#2e4c2c]">
                       <Icon className="w-5 h-5" />
                     </div>
                   </div>
-                  <h3 className="text-lg font-medium font-['Bodoni_Moda',serif] text-[#032517] mb-2 leading-snug">
+                  <h3 className="text-lg font-medium font-['Bodoni_Moda',serif] text-[#1c2e1b] mb-2 leading-snug">
                     {step.title}
                   </h3>
-                  <p className="text-xs text-[#424843] leading-relaxed">
+                  <p className="text-xs text-[#525648] leading-relaxed">
                     {step.description}
                   </p>
                 </div>
@@ -87,9 +87,9 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onOpenPublish }) => {
           <button
             id="btn-howitworks-publish"
             onClick={onOpenPublish}
-            className="inline-flex items-center gap-2 px-8 py-3.5 text-sm font-semibold text-white bg-[#032517] hover:bg-[#1b3b2b] rounded-full transition-all shadow-md active:scale-98"
+            className="inline-flex items-center gap-2 px-8 py-3.5 text-sm font-bold text-[#1a2d19] bg-[#9bb593] hover:bg-[#8ea886] rounded-full transition-all shadow-xs hover:shadow-md active:scale-98 cursor-pointer border border-[#8ea886]"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-[#1a2d19]" />
             <span>Publicar mi primera prenda ahora</span>
           </button>
         </div>

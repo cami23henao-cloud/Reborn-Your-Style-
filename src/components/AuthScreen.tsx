@@ -19,6 +19,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'normal' | 'confeccionista'>('normal');
 
   // Recovery & Verification Fields
   const [verificationCode, setVerificationCode] = useState('');
@@ -320,6 +321,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           email: cleanEmail,
           name: name.trim(),
           password,
+          role: selectedRole,
         }),
       });
 
@@ -473,26 +475,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-7hcy3n5dieqvkwh4ajbnde-612995330455.us-east1.run.app';
 
   return (
-    <div className="min-h-screen bg-[#fef8f3] text-[#1d1b19] flex flex-col justify-between selection:bg-[#caecc6] selection:text-[#032517]">
+    <div className="min-h-screen bg-[#faf8f5] text-[#0f172a] flex flex-col justify-between selection:bg-[#9bb593] selection:text-white">
       {/* Top Brand Banner */}
-      <header className="w-full border-b border-[#e6e2dd] bg-[#f8f3ee]/80 backdrop-blur px-6 py-4">
+      <header className="w-full border-b border-[#e5decb] bg-white/80 backdrop-blur px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#032517] text-[#caecc6] flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-[#9bb593] text-white flex items-center justify-center shadow-xs">
               <Leaf className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-['Bodoni_Moda',serif] text-xl font-medium tracking-tight text-[#032517] block">
+              <span className="font-['Outfit',sans-serif] text-xl font-bold tracking-tight text-[#0f291e] block">
                 Reborn Your Style
               </span>
-              <span className="text-[10px] uppercase tracking-widest text-[#486548] font-bold block">
+              <span className="text-[10px] uppercase tracking-widest text-[#2e4c2c] font-bold block">
                 Moda Circular & Transformación Textil
               </span>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-[#486548] font-semibold bg-[#caecc6]/40 px-3 py-1.5 rounded-full border border-[#aecfab]">
-            <ShieldCheck className="w-4 h-4 text-[#032517]" />
+          <div className="hidden sm:flex items-center gap-2 text-xs text-[#1c2e1b] font-semibold bg-[#f5f0e6] px-3.5 py-1.5 rounded-full border border-[#a7f3d0]">
+            <ShieldCheck className="w-4 h-4 text-[#9bb593]" />
             <span>Acceso Privado & Cuentas Independientes</span>
           </div>
         </div>
@@ -500,15 +502,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
       {/* Main Authentication Card */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-[#e6e2dd] overflow-hidden transition-all duration-300">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-[#e5decb] overflow-hidden transition-all duration-300">
           {/* Card Top Title */}
-          <div className="p-6 pb-4 border-b border-[#e6e2dd] bg-[#f8f3ee] text-center relative">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#caecc6]/50 text-[#032517] text-[11px] font-bold uppercase tracking-wider mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
+          <div className="p-6 pb-4 border-b border-[#e5decb] bg-[#f5f0e6]/50 text-center relative">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[#1c2e1b] text-[11px] font-bold uppercase tracking-wider mb-2 border border-[#a7f3d0]">
+              <Sparkles className="w-3.5 h-3.5 text-[#9bb593]" />
               <span>Plataforma Protegida</span>
             </div>
 
-            <h1 className="text-2xl font-normal font-['Bodoni_Moda',serif] text-[#032517]">
+            <h1 className="text-2xl font-bold font-['Outfit',sans-serif] text-[#0f291e]">
               {mode === 'forgot'
                 ? step === 'verify'
                   ? 'Nueva Contraseña'
@@ -519,7 +521,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 ? 'Iniciar sesión'
                 : 'Crear una cuenta'}
             </h1>
-            <p className="text-xs text-[#727973] mt-1 font-light">
+            <p className="text-xs text-[#64748b] mt-1 font-normal">
               {mode === 'forgot'
                 ? 'Sigue las instrucciones para restablecer tu acceso seguro'
                 : step === 'verify'
@@ -532,7 +534,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
           {/* Mode Switcher Tabs (Only if not in forgot mode and not in verify step) */}
           {mode !== 'forgot' && step === 'form' && (
-            <div className="flex border-b border-[#e6e2dd] bg-[#f8f3ee]/40 text-xs font-semibold">
+            <div className="flex border-b border-[#e5decb] bg-[#faf8f5] text-xs font-semibold">
               <button
                 id="tab-login-btn"
                 type="button"
@@ -543,8 +545,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 }}
                 className={`flex-1 py-3 text-center transition-colors border-b-2 ${
                   mode === 'login'
-                    ? 'border-[#032517] text-[#032517] bg-white'
-                    : 'border-transparent text-[#727973] hover:text-[#032517]'
+                    ? 'border-[#9bb593] text-[#1c2e1b] font-bold bg-white'
+                    : 'border-transparent text-[#64748b] hover:text-[#0f291e]'
                 }`}
               >
                 Iniciar sesión
@@ -559,8 +561,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 }}
                 className={`flex-1 py-3 text-center transition-colors border-b-2 ${
                   mode === 'register'
-                    ? 'border-[#032517] text-[#032517] bg-white'
-                    : 'border-transparent text-[#727973] hover:text-[#032517]'
+                    ? 'border-[#9bb593] text-[#1c2e1b] font-bold bg-white'
+                    : 'border-transparent text-[#64748b] hover:text-[#0f291e]'
                 }`}
               >
                 Crear una cuenta
@@ -703,7 +705,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   id="btn-submit-login"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -785,11 +787,58 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-[#032517] mb-1.5">
+                    Tipo de cuenta
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRole('normal')}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        selectedRole === 'normal'
+                          ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                          : 'border-[#e6e2dd] bg-[#fef8f3] hover:bg-stone-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-[#032517]">Usuario normal</span>
+                        {selectedRole === 'normal' && (
+                          <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-stone-500 leading-tight">
+                        Para renovar prendas y participar en la comunidad.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRole('confeccionista')}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        selectedRole === 'confeccionista'
+                          ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                          : 'border-[#e6e2dd] bg-[#fef8f3] hover:bg-stone-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-[#032517]">Confeccionista</span>
+                        {selectedRole === 'confeccionista' && (
+                          <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-stone-500 leading-tight">
+                        Para modistas, costura y transformación textil.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
                 <button
                   id="btn-submit-register"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -848,7 +897,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   id="btn-confirm-register-verify"
                   type="submit"
                   disabled={loading || verificationCode.length !== 6}
-                  className="w-full py-3 px-4 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -904,7 +953,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   id="btn-submit-forgot-request"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -1022,7 +1071,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   id="btn-submit-reset-password"
                   type="submit"
                   disabled={loading || verificationCode.length !== 6}
-                  className="w-full py-3 px-4 bg-[#032517] text-white rounded-full text-xs font-semibold hover:bg-[#1b3b2b] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? (
                     <>

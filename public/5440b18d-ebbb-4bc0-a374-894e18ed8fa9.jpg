@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&amp;family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&amp;family=Montserrat:wght@400;500;600&amp;display=swap');
+      .bg-circle { fill: #F8F6F0; }
+      .circle-ring { fill: none; stroke: #3D5537; stroke-width: 3.2; stroke-linecap: round; }
+      .pine-fill { fill: #3D5537; }
+      .dark-fill { fill: #1B1E19; }
+      .dark-stroke { stroke: #1B1E19; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .brand-title { font-family: 'Cinzel', 'Cormorant Garamond', 'Times New Roman', serif; font-size: 38px; font-weight: 700; letter-spacing: 0.38em; fill: #1B1E19; text-anchor: middle; }
+      .brand-subtitle { font-family: 'Montserrat', sans-serif; font-size: 19px; font-weight: 500; letter-spacing: 0.26em; fill: #2C3029; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Background Warm Cream Circle -->
+  <circle cx="300" cy="300" r="288" class="bg-circle" />
+
+  <!-- Outer Ring with Circular Arrow -->
+  <!-- Top arc ending with clockwise arrow at x=342, y=52 -->
+  <path d="M 140 102 A 250 250 0 0 1 345 54" class="circle-ring" />
+  <!-- Arrow head at top pointing clockwise -->
+  <polygon points="344,46 360,56 343,65 348,56" class="pine-fill" />
+
+  <!-- Rest of circular ring -->
+  <path d="M 360 58 A 250 250 0 0 1 548 320 A 250 250 0 0 1 300 550 A 250 250 0 0 1 68 380" class="circle-ring" />
+
+  <!-- Bottom-left Botanical Leaf Branch on Circle Arc -->
+  <g id="botanical-branch" class="pine-fill">
+    <path d="M 65 370 Q 52 300 90 220" fill="none" stroke="#3D5537" stroke-width="3.2" stroke-linecap="round" />
+    <!-- Leaves along the branch -->
+    <path d="M 74 350 C 55 352 45 338 52 325 C 60 338 68 344 74 350 Z" />
+    <path d="M 68 335 C 75 320 90 322 92 334 C 85 340 76 342 68 335 Z" />
+    <path d="M 60 310 C 42 305 40 290 50 280 C 56 292 62 298 60 310 Z" />
+    <path d="M 62 285 C 72 272 88 278 86 290 C 78 294 70 292 62 285 Z" />
+    <path d="M 66 260 C 52 248 56 234 68 230 C 70 242 74 250 66 260 Z" />
+    <path d="M 78 245 C 90 232 104 240 100 252 C 92 254 84 252 78 245 Z" />
+    <path d="M 88 222 C 82 208 92 198 102 202 C 102 212 98 218 88 222 Z" />
+  </g>
+
+  <!-- Clothes Hanger Icon at Top (Black wire) -->
+  <g id="hanger" class="dark-stroke" stroke-width="3.2">
+    <!-- Hook top -->
+    <path d="M 298 126 C 298 112 312 110 314 122 C 316 136 300 142 300 155" />
+    <!-- Triangle -->
+    <path d="M 300 155 L 244 196 L 356 196 Z" />
+  </g>
+
+  <!-- Green Leaf Sprouting to Upper Right from Hanger -->
+  <g id="sprouting-leaf" transform="translate(322, 142) rotate(-35)">
+    <path d="M 0 0 C 15 -18 35 -15 48 0 C 35 15 15 18 0 0 Z" fill="#3D5537" />
+    <path d="M 0 0 L 40 0" stroke="#F8F6F0" stroke-width="1.5" fill="none" stroke-linecap="round" />
+  </g>
+
+  <!-- Center Monogram: R (Dark), Y (Pine Green), S (Dark) -->
+  <g id="monogram">
+    <!-- Letter R: Classical serif -->
+    <!-- Stem -->
+    <path d="M 205 195 L 235 195 L 235 204 L 225 204 L 225 292 L 238 292 L 238 301 L 195 301 L 195 292 L 205 292 Z" class="dark-fill" />
+    <!-- R Bowl -->
+    <path d="M 225 204 L 255 204 C 275 204 286 215 286 230 C 286 246 274 256 254 256 L 225 256 Z M 225 214 L 225 246 L 252 246 C 265 246 272 240 272 230 C 272 220 264 214 252 214 Z" class="dark-fill" />
+    <!-- R Leg (Graceful sweeping curve) -->
+    <path d="M 246 254 L 274 292 C 282 303 292 306 305 305 L 305 296 C 295 296 288 292 282 284 L 256 248 Z" class="dark-fill" />
+
+    <!-- Letter Y: Pine Green (Centered) -->
+    <!-- Left diagonal arm -->
+    <path d="M 276 198 L 298 245 L 306 245 L 288 198 Z" class="pine-fill" />
+    <!-- Right diagonal arm -->
+    <path d="M 324 198 L 294 258 L 294 306 L 306 306 L 306 258 L 336 198 Z" class="pine-fill" />
+    <!-- Y Serifs top -->
+    <rect x="270" y="196" width="18" height="3" class="pine-fill" />
+    <rect x="322" y="196" width="18" height="3" class="pine-fill" />
+    <rect x="290" y="304" width="20" height="3" class="pine-fill" />
+
+    <!-- Letter S: Classical serif on the right -->
+    <path d="M 374 215 C 370 205 358 198 344 198 C 328 198 316 208 316 222 C 316 236 326 242 344 248 C 365 254 378 262 378 278 C 378 296 362 308 342 308 C 324 308 312 298 308 285 L 318 281 C 322 292 331 298 342 298 C 354 298 365 290 365 278 C 365 264 354 258 335 252 C 316 245 304 237 304 222 C 304 207 318 198 338 198 C 352 198 362 204 366 212 Z" class="dark-fill" />
+  </g>
+
+  <!-- Typography: R E B O R N -->
+  <text x="300" y="385" class="brand-title">REBORN</text>
+
+  <!-- Typography: — YOUR STYLE — -->
+  <text x="300" y="426" class="brand-subtitle">— YOUR STYLE —</text>
+
+  <!-- Delicate Open Heart Outline ♡ -->
+  <path d="M 300 464 C 298 460 292 452 284 452 C 274 452 268 460 268 470 C 268 482 282 494 300 505 C 318 494 332 482 332 470 C 332 460 326 452 316 452 C 308 452 302 460 300 464 Z" fill="none" stroke="#1B1E19" stroke-width="2.2" stroke-linejoin="round" />
+</svg>

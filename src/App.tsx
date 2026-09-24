@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { User, Garment, Professional, Tutorial, Conversation, ChatMessage } from './types';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { User, Garment, Professional, Tutorial, Conversation, ChatMessage, NavigationTab } from './types';
 import { INITIAL_GARMENTS, INITIAL_PROFESSIONALS, INITIAL_TUTORIALS } from './data/initialData';
 
-// Components
+// Components & Independent Page Sheets
 import { Header } from './components/Header';
-import { Hero } from './components/Hero';
-import { Manifesto } from './components/Manifesto';
-import { Purpose } from './components/Purpose';
-import { HowItWorks } from './components/HowItWorks';
-import { GarmentsSection } from './components/GarmentsSection';
-import { ProfessionalsSection } from './components/ProfessionalsSection';
-import { TutorialsSection } from './components/TutorialsSection';
-import { ImpactSection } from './components/ImpactSection';
-import { AboutSection } from './components/AboutSection';
-import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
+import { InicioPage } from './components/pages/InicioPage';
+import { QuienesSomosPage } from './components/pages/QuienesSomosPage';
+import { MisionPage } from './components/pages/MisionPage';
+import { VisionPage } from './components/pages/VisionPage';
+import { CatalogoPage } from './components/pages/CatalogoPage';
+import { ServiciosPage } from './components/pages/ServiciosPage';
+import { TutorialesPage } from './components/pages/TutorialesPage';
+import { ImpactoPage } from './components/pages/ImpactoPage';
+import { ContactoPage } from './components/pages/ContactoPage';
 
 // Modals and Drawers
 import { AuthScreen } from './components/AuthScreen';
@@ -26,9 +26,41 @@ import { AdvisorModal } from './components/AdvisorModal';
 import { ProfessionalModal } from './components/ProfessionalModal';
 import { TutorialModal } from './components/TutorialModal';
 import { ProposeIdeaModal } from './components/ProposeIdeaModal';
+import { AdminPanel } from './components/AdminPanel';
+import { PasswordResetPage } from './components/pages/PasswordResetPage';
 import { logoutFirebaseUser, onFirebaseAuthStateChanged, updateUserProfileInFirestore } from './lib/firebase';
 
+// Helper to extract NavigationTab from browser pathname
+const getTabFromPath = (pathname: string): NavigationTab => {
+  const clean = pathname.replace(/^\//, '').split('/')[0].toLowerCase();
+  switch (clean) {
+    case 'quienes-somos':
+      return 'quienes-somos';
+    case 'mision':
+      return 'mision';
+    case 'vision':
+      return 'vision';
+    case 'catalogo':
+      return 'catalogo';
+    case 'servicios':
+      return 'servicios';
+    case 'tutoriales':
+      return 'tutoriales';
+    case 'impacto':
+      return 'impacto';
+    case 'contacto':
+      return 'contacto';
+    case '':
+    case 'inicio':
+    default:
+      return 'inicio';
+  }
+};
+
 export const App: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   // Application Data States - User starts as null (guest) unless authenticated session exists
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('reborn_user');
@@ -59,6 +91,19 @@ export const App: React.FC = () => {
     return [];
   });
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  // Derive activeTab strictly from current URL route
+  const activeTab: NavigationTab = getTabFromPath(location.pathname);
+
+  // Automatically scroll to top whenever URL changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [location.pathname]);
+
+  const handleSelectTab = (tab: NavigationTab) => {
+    const targetPath = tab === 'inicio' ? '/' : `/${tab}`;
+    navigate(targetPath);
+  };
 
   // Modals Visibility
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -446,6 +491,28 @@ export const App: React.FC = () => {
     }
   };
 
+  // Dedicated isolated route for Administrator Panel (Independent access exclusively for administrators)
+  if (
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/administrador') ||
+    location.pathname.startsWith('/panel-control')
+  ) {
+    return <AdminPanel onBackToSite={() => navigate('/')} />;
+  }
+
+  // Dedicated route for Password Recovery
+  if (location.pathname.startsWith('/recuperar-clave')) {
+    return (
+      <PasswordResetPage
+        onLoginSuccess={(loggedUser) => {
+          setCurrentUser(loggedUser);
+          localStorage.setItem('reborn_user', JSON.stringify(loggedUser));
+          navigate('/');
+        }}
+      />
+    );
+  }
+
   // MANDATORY AUTHENTICATION GUARD:
   // Strictly prevent accessing internal content unless logged in.
   if (!currentUser) {
@@ -460,11 +527,13 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#fef8f3] text-[#1d1b19] flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-[#caecc6] selection:text-[#032517]">
+    <div className="min-h-screen bg-[#faf8f4] text-[#1c2e1b] flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-[#9bb593] selection:text-[#1a2d19]">
       {/* 1. Header with Complete Navigation & User Control */}
       <Header
         currentUser={currentUser}
         unreadCount={conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0)}
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenPublish={handleOpenPublish}
         onOpenProfile={() => {
@@ -477,71 +546,160 @@ export const App: React.FC = () => {
           setIsAdvisorOpen(true);
         }}
         onLogout={handleLogout}
+        garments={garments}
+        professionals={professionals}
+        tutorials={tutorials}
+        onSelectGarment={(garment) => {
+          handleSelectTab('catalogo');
+          setSelectedGarmentForIdea(garment);
+        }}
+        onSelectProfessional={(prof) => setSelectedProfessional(prof)}
+        onSelectTutorial={(tut) => setSelectedTutorial(tut)}
       />
 
-      {/* 2. Main Sections */}
+      {/* 2. Independent Multipage System: Each route renders its own isolated page */}
       <main className="flex-1">
-        {/* Hero Section */}
-        <Hero
-          onReutilizarClick={handleOpenPublish}
-          onOfrecerServiciosClick={() => {
-            const el = document.getElementById('contacto');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-        />
-
-        {/* Circular Manifesto */}
-        <Manifesto />
-
-        {/* Platform Purpose & Pillars */}
-        <Purpose />
-
-        {/* Interactive Step-by-step How It Works */}
-        <HowItWorks onOpenPublish={handleOpenPublish} />
-
-        {/* Garments Catalog & Visual Palette Filters */}
-        <GarmentsSection
-          garments={garments}
-          onOpenPublish={handleOpenPublish}
-          onProposeIdea={(garment) => {
-            if (!currentUser) {
-              setIsAuthOpen(true);
-            } else {
-              setSelectedGarmentForIdea(garment);
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <InicioPage
+                onSelectTab={handleSelectTab}
+                onOpenPublish={handleOpenPublish}
+                onOpenAdvisor={() => {
+                  setAdvisorTargetGarment(null);
+                  setIsAdvisorOpen(true);
+                }}
+              />
             }
-          }}
-        />
+          />
+          <Route path="/inicio" element={<Navigate to="/" replace />} />
 
-        {/* Master Artisans & Tailors Directory */}
-        <ProfessionalsSection
-          professionals={professionals}
-          onSelectProfessional={(prof) => setSelectedProfessional(prof)}
-          onContactProfessional={handleContactProfessional}
-        />
+          <Route
+            path="/quienes-somos"
+            element={
+              <QuienesSomosPage
+                onSelectTab={handleSelectTab}
+                onOpenAdvisor={() => {
+                  setAdvisorTargetGarment(null);
+                  setIsAdvisorOpen(true);
+                }}
+              />
+            }
+          />
 
-        {/* DIY Tutorials & Open Knowledge */}
-        <TutorialsSection
-          tutorials={tutorials}
-          onSelectTutorial={(tut) => setSelectedTutorial(tut)}
-        />
+          <Route
+            path="/mision"
+            element={
+              <MisionPage
+                onSelectTab={handleSelectTab}
+                onOpenPublish={handleOpenPublish}
+              />
+            }
+          />
 
-        {/* Environmental Impact & Circular Calculator */}
-        <ImpactSection />
+          <Route
+            path="/vision"
+            element={
+              <VisionPage
+                onSelectTab={handleSelectTab}
+                onOpenPublish={handleOpenPublish}
+              />
+            }
+          />
 
-        {/* About Us: Mission, Vision, Values */}
-        <AboutSection />
+          <Route
+            path="/catalogo"
+            element={
+              <CatalogoPage
+                garments={garments}
+                onSelectTab={handleSelectTab}
+                onOpenPublish={handleOpenPublish}
+                onProposeIdea={(garment) => {
+                  if (!currentUser) {
+                    setIsAuthOpen(true);
+                  } else {
+                    setSelectedGarmentForIdea(garment);
+                  }
+                }}
+              />
+            }
+          />
 
-        {/* Contact Form & FAQs */}
-        <ContactSection
-          onOpenAdvisor={() => {
-            setAdvisorTargetGarment(null);
-            setIsAdvisorOpen(true);
-          }}
-        />
+          <Route
+            path="/servicios"
+            element={
+              <ServiciosPage
+                professionals={professionals}
+                onSelectTab={handleSelectTab}
+                onSelectProfessional={(prof) => setSelectedProfessional(prof)}
+                onContactProfessional={handleContactProfessional}
+                onOpenAdvisor={() => {
+                  setAdvisorTargetGarment(null);
+                  setIsAdvisorOpen(true);
+                }}
+              />
+            }
+          />
+
+          <Route
+            path="/tutoriales"
+            element={
+              <TutorialesPage
+                tutorials={tutorials}
+                onSelectTab={handleSelectTab}
+                onSelectTutorial={(tut) => setSelectedTutorial(tut)}
+              />
+            }
+          />
+
+          <Route
+            path="/impacto"
+            element={
+              <ImpactoPage
+                onSelectTab={handleSelectTab}
+                onOpenPublish={handleOpenPublish}
+              />
+            }
+          />
+
+          <Route
+            path="/contacto"
+            element={
+              <ContactoPage
+                onSelectTab={handleSelectTab}
+                onOpenAdvisor={() => {
+                  setAdvisorTargetGarment(null);
+                  setIsAdvisorOpen(true);
+                }}
+              />
+            }
+          />
+
+          <Route path="/admin" element={<AdminPanel onBackToSite={() => navigate('/')} />} />
+          <Route path="/administrador" element={<AdminPanel onBackToSite={() => navigate('/')} />} />
+          <Route path="/panel-control" element={<AdminPanel onBackToSite={() => navigate('/')} />} />
+          <Route
+            path="/recuperar-clave"
+            element={
+              <PasswordResetPage
+                onLoginSuccess={(loggedUser) => {
+                  setCurrentUser(loggedUser);
+                  localStorage.setItem('reborn_user', JSON.stringify(loggedUser));
+                  navigate('/');
+                }}
+              />
+            }
+          />
+
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
-      {/* 3. Footer */}
+      {/* 3. Footer with Consistent Multipage Navigation */}
       <Footer
+        onSelectTab={handleSelectTab}
         onOpenAdvisor={() => {
           setAdvisorTargetGarment(null);
           setIsAdvisorOpen(true);

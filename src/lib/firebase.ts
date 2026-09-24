@@ -5,6 +5,7 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -15,7 +16,7 @@ import {
   getDocFromServer,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { User } from '../types';
+import { User, UserRole, UserStatus } from '../types';
 
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -45,9 +46,23 @@ async function testFirestoreConnection() {
 testFirestoreConnection();
 
 /**
+ * Sends a real official password reset email via Firebase Authentication
+ */
+export async function sendFirebasePasswordReset(email: string): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    await sendPasswordResetEmail(auth, cleanEmail);
+    return true;
+  } catch (err: any) {
+    console.warn('Firebase sendPasswordResetEmail:', err);
+    throw err;
+  }
+}
+
+/**
  * Synchronizes Firebase User with Firestore user document
  */
-export async function syncFirebaseUserProfile(fbUser: FirebaseUser): Promise<User> {
+export async function syncFirebaseUserProfile(fbUser: FirebaseUser, initialRole?: UserRole): Promise<User> {
   const userDocRef = doc(db, 'users', fbUser.uid);
   try {
     const snap = await getDoc(userDocRef);
@@ -69,6 +84,9 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser): Promise<Use
         isVerified: fbUser.emailVerified ?? true,
         joinedDate: data.joinedDate || new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
         authProvider: 'google',
+        role: (data.role as UserRole) || (fbUser.email === 'admin@rebornyourstyle.com' ? 'admin' : 'normal'),
+        isBlocked: Boolean(data.isBlocked),
+        status: (data.status as UserStatus) || (data.isBlocked ? 'bloqueado' : 'activo'),
       };
       if (!data.avatar && fbUser.photoURL) {
         await setDoc(userDocRef, { avatar: fbUser.photoURL }, { merge: true });
@@ -80,12 +98,15 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser): Promise<Use
   }
 
   // Create new profile in Firestore
+  const determinedRole: UserRole = initialRole || (fbUser.email === 'admin@rebornyourstyle.com' ? 'admin' : 'normal');
   const newUser: User = {
     id: fbUser.uid,
     name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Usuario',
     email: fbUser.email || '',
     avatar: fbUser.photoURL || '',
-    bio: 'Miembro de Reborn Your Style con cuenta de Google verificada.',
+    bio: determinedRole === 'confeccionista' 
+      ? 'Confeccionista en Reborn Your Style. Ofrezco servicios de costura, patronaje y transformación textil sostenible.'
+      : 'Miembro de Reborn Your Style con cuenta verificada.',
     country: 'Colombia',
     department: 'Antioquia',
     city: 'Medellín',
@@ -96,6 +117,9 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser): Promise<Use
     isVerified: true,
     joinedDate: new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
     authProvider: 'google',
+    role: determinedRole,
+    isBlocked: false,
+    status: 'activo',
   };
 
   try {

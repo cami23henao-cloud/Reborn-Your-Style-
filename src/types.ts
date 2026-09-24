@@ -1,3 +1,6 @@
+export type UserRole = 'normal' | 'confeccionista' | 'admin';
+export type UserStatus = 'activo' | 'bloqueado';
+
 export interface User {
   id: string;
   name: string;
@@ -14,6 +17,9 @@ export interface User {
   isVerified: boolean;
   joinedDate: string;
   authProvider: 'email' | 'google';
+  role?: UserRole;
+  isBlocked?: boolean;
+  status?: UserStatus;
 }
 
 export type GarmentCategory =
@@ -57,10 +63,38 @@ export interface Garment {
   colorName: string;
   colorHex: string;
   photos: string[];
+  image?: string;
+  color?: string;
+  location?: string;
   createdAt: string;
   authorName: string;
   authorEmail?: string;
-  status: 'disponible' | 'en_proceso' | 'transformada';
+  status: 'disponible' | 'en_proceso' | 'transformada' | 'oculta';
+}
+
+export interface AdminReport {
+  id: string;
+  targetType: 'prenda' | 'usuario' | 'confeccionista' | 'general';
+  targetId: string;
+  targetTitle?: string;
+  reportedBy: string;
+  reporterEmail?: string;
+  reason: string;
+  details?: string;
+  createdAt: string;
+  status: 'pendiente' | 'revisado' | 'resuelto' | 'descartado';
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  normalUsers: number;
+  confeccionistasCount: number;
+  totalGarments: number;
+  activeGarments: number;
+  hiddenGarments: number;
+  totalReports: number;
+  pendingReports: number;
+  totalInquiries: number;
 }
 
 export interface Professional {
@@ -135,3 +169,15 @@ export interface AdvisorInquiry {
   createdAt: string;
   status: 'Recibido' | 'En revisión' | 'Respondido';
 }
+
+export type NavigationTab =
+  | 'inicio'
+  | 'quienes-somos'
+  | 'mision'
+  | 'vision'
+  | 'catalogo'
+  | 'servicios'
+  | 'tutoriales'
+  | 'impacto'
+  | 'contacto';
+
