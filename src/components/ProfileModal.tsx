@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, isModista, isAdmin } from '../types';
 import { LOCATION_HIERARCHY } from '../data/initialData';
-import { X, Edit3, Save, RotateCcw, LogOut, Trash2, MapPin, Phone, Mail, UserCheck, ShieldCheck } from 'lucide-react';
+import { X, Edit3, Save, RotateCcw, LogOut, Trash2, MapPin, Phone, Mail, UserCheck, ShieldCheck, Scissors, User as UserIcon } from 'lucide-react';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -106,6 +106,22 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <h3 className="text-lg font-bold text-[#032517] font-['Bodoni_Moda',serif]">
                   {name}
                 </h3>
+                {isModista(user.role) ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#caecc6] text-[#032517]">
+                    <Scissors className="w-3 h-3" />
+                    Modista
+                  </span>
+                ) : isAdmin(user.role) ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    <ShieldCheck className="w-3 h-3" />
+                    Administrador
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-200 text-stone-700">
+                    <UserIcon className="w-3 h-3" />
+                    Usuario
+                  </span>
+                )}
                 {user.isVerified && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#caecc6] text-[#032517]">
                     <ShieldCheck className="w-3.5 h-3.5" />

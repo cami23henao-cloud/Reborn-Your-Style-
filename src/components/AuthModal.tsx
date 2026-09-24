@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { X, Mail, Lock, User as UserIcon, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, KeyRound, ExternalLink, ShieldCheck, Settings, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, KeyRound, ExternalLink, ShieldCheck, Settings, Eye, EyeOff, ArrowLeft, Scissors } from 'lucide-react';
 import { loginWithGoogleFirebase } from '../lib/firebase';
 
 interface AuthModalProps {
@@ -14,6 +14,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [step, setStep] = useState<'form' | 'verify'>('form');
+  const [forgotStep, setForgotStep] = useState<'email' | 'code' | 'password'>('email');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -21,11 +22,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'normal' | 'confeccionista'>('normal');
+  const [selectedRole, setSelectedRole] = useState<'usuario' | 'modista'>('usuario');
 
   // Verification code
   const [verificationCode, setVerificationCode] = useState('');
   const [countdown, setCountdown] = useState<number>(600); // 10 minutes
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -41,11 +43,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   // Countdown timer for 6-digit code
   useEffect(() => {
     let timer: any;
-    if (step === 'verify' && countdown > 0) {
+    if ((step === 'verify' || (mode === 'forgot' && forgotStep === 'code')) && countdown > 0) {
       timer = setInterval(() => setCountdown((c) => c - 1), 1000);
     }
     return () => clearInterval(timer);
-  }, [step, countdown]);
+  }, [step, mode, forgotStep, countdown]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    let timer: any;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown((c) => Math.max(0, c - 1)), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Google Identity Services (GSI) One Tap background initialization
   useEffect(() => {
@@ -386,7 +397,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     }
   };
 
-  // 4. Forgot password request
+  // 4. Forgot password request (No prior registration required)
   const handleRequestPasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -410,14 +421,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setStep('verify');
+        setForgotStep('code');
         setCountdown(600);
-        setInfoMessage(data.message || `Código enviado a ${cleanEmail}. Revisa tu bandeja de entrada.`);
+        setResendCooldown(60);
+        setInfoMessage(data.message || `Código de 6 dígitos enviado a ${cleanEmail}. Revisa tu bandeja de entrada.`);
       } else {
         setErrorMessage(data.error || 'No se pudo enviar el código de recuperación.');
       }
     } catch (err) {
       setErrorMessage('Error al conectar con el servidor.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4b. Verify the 6-digit recovery code before allowing password change
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setInfoMessage('');
+
+    const cleanCode = verificationCode.trim();
+    if (!cleanCode || cleanCode.length !== 6) {
+      setErrorMessage('Ingresa el código numérico de 6 dígitos completo.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-reset-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: cleanCode,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setForgotStep('password');
+        setInfoMessage('¡Código verificado exitosamente! Ahora puedes crear tu nueva contraseña.');
+      } else {
+        setErrorMessage(data.error || 'El código ingresado es incorrecto o ha expirado.');
+      }
+    } catch (err) {
+      setErrorMessage('Error de conexión al verificar el código.');
     } finally {
       setLoading(false);
     }
@@ -440,7 +489,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('Las contraseñas no coinciden.');
+      setErrorMessage('Las contraseñas no coinciden. Por favor verifica.');
       return;
     }
 
@@ -646,7 +695,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     type="button"
                     onClick={() => {
                       setMode('forgot');
-                      setStep('form');
+                      setForgotStep('email');
+                      setVerificationCode('');
+                      setPassword('');
+                      setConfirmPassword('');
                       setErrorMessage('');
                       setInfoMessage('');
                     }}
@@ -754,46 +806,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
               <div>
                 <label className="block text-xs font-semibold text-[#032517] mb-1.5">
-                  Tipo de cuenta
+                  ¿Qué tipo de cuenta deseas crear? <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedRole('normal')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      selectedRole === 'normal'
-                        ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                    onClick={() => setSelectedRole('usuario')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      selectedRole === 'usuario'
+                        ? 'border-[#032517] bg-[#f0f4f0] ring-2 ring-[#032517]'
                         : 'border-[#e6e2dd] bg-white hover:bg-stone-50'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-[#032517]">Usuario normal</span>
-                      {selectedRole === 'normal' && (
+                      <span className="text-xs font-bold text-[#032517] flex items-center gap-1.5">
+                        <UserIcon className="w-3.5 h-3.5 text-[#2e4c2c]" />
+                        Usuario
+                      </span>
+                      {selectedRole === 'usuario' && (
                         <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
                       )}
                     </div>
                     <p className="text-[10px] text-stone-500 leading-tight">
-                      Para renovar prendas y participar en la comunidad.
+                      Para renovar prendas, comprar, intercambiar y unirte a la moda circular.
                     </p>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setSelectedRole('confeccionista')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      selectedRole === 'confeccionista'
-                        ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                    onClick={() => setSelectedRole('modista')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      selectedRole === 'modista'
+                        ? 'border-[#032517] bg-[#f0f4f0] ring-2 ring-[#032517]'
                         : 'border-[#e6e2dd] bg-white hover:bg-stone-50'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-[#032517]">Confeccionista</span>
-                      {selectedRole === 'confeccionista' && (
+                      <span className="text-xs font-bold text-[#032517] flex items-center gap-1.5">
+                        <Scissors className="w-3.5 h-3.5 text-[#2e4c2c]" />
+                        Modista
+                      </span>
+                      {selectedRole === 'modista' && (
                         <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
                       )}
                     </div>
                     <p className="text-[10px] text-stone-500 leading-tight">
-                      Para modistas, costura y transformación textil.
+                      Para modistas, costura a medida, arreglos y transformación textil.
                     </p>
                   </button>
                 </div>
@@ -865,9 +923,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             </form>
           )}
 
-          {/* Mode: Forgot Password Form */}
-          {mode === 'forgot' && step === 'form' && (
+          {/* Mode: Forgot Password - Step 1: Ingrese su correo */}
+          {mode === 'forgot' && forgotStep === 'email' && (
             <form onSubmit={handleRequestPasswordReset} className="space-y-3.5">
+              <div className="text-center mb-2">
+                <h3 className="text-sm font-bold text-[#032517]">Recuperar Contraseña</h3>
+                <p className="text-xs text-stone-600 mt-1">
+                  Escribe tu correo electrónico para enviarte un código de verificación real de 6 dígitos.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-[#032517] mb-1">
                   Correo electrónico
@@ -898,8 +963,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 type="button"
                 onClick={() => {
                   setMode('login');
-                  setStep('form');
+                  setForgotStep('email');
                   setErrorMessage('');
+                  setInfoMessage('');
                 }}
                 className="w-full text-center text-xs text-[#486548] font-semibold hover:text-[#032517] flex items-center justify-center gap-1"
               >
@@ -909,9 +975,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             </form>
           )}
 
-          {/* Mode: Forgot Password Verify & Reset */}
-          {mode === 'forgot' && step === 'verify' && (
-            <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5">
+          {/* Mode: Forgot Password - Step 2: Introducir código de 6 dígitos recibido */}
+          {mode === 'forgot' && forgotStep === 'code' && (
+            <form onSubmit={handleVerifyResetCode} className="space-y-3.5">
+              <div className="text-center mb-1">
+                <h3 className="text-sm font-bold text-[#032517]">Verificar Código</h3>
+                <p className="text-xs text-stone-600 mt-1">
+                  Hemos enviado un código numérico de 6 dígitos a <strong className="text-[#032517]">{email}</strong>.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-[#032517] mb-1 text-center">
                   Código de 6 dígitos
@@ -920,49 +993,110 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                   type="text"
                   maxLength={6}
                   required
+                  autoFocus
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="123456"
-                  className="w-full text-center tracking-[6px] font-mono text-xl font-bold py-2 bg-white border-2 border-[#032517] rounded-xl text-[#032517] focus:outline-none"
+                  className="w-full text-center tracking-[8px] font-mono text-2xl font-bold py-2.5 bg-white border-2 border-[#032517] rounded-xl text-[#032517] focus:outline-none shadow-xs"
                 />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-stone-500">
+                <span>Expira en {formatTime(countdown)}</span>
+                <button
+                  type="button"
+                  onClick={handleRequestPasswordReset}
+                  disabled={loading || resendCooldown > 0}
+                  className="text-[#2e4c2c] hover:underline font-semibold disabled:opacity-50 disabled:no-underline"
+                >
+                  {resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : 'Reenviar código'}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || verificationCode.trim().length !== 6}
+                className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Verificar código</span>}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotStep('email');
+                  setVerificationCode('');
+                  setErrorMessage('');
+                }}
+                className="w-full text-center text-xs text-stone-500 hover:text-[#032517]"
+              >
+                ← Cambiar correo electrónico
+              </button>
+            </form>
+          )}
+
+          {/* Mode: Forgot Password - Step 3: Crear nueva contraseña */}
+          {mode === 'forgot' && forgotStep === 'password' && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5">
+              <div className="text-center mb-1">
+                <div className="w-9 h-9 mx-auto rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 mb-1">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-[#032517]">Crear Nueva Contraseña</h3>
+                <p className="text-xs text-stone-600 mt-0.5">
+                  Define tu nueva contraseña segura para <strong className="text-[#032517]">{email}</strong>.
+                </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[#032517] mb-1">
                   Nueva contraseña
                 </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full px-3 py-2 bg-white border border-[#e6e2dd] rounded-xl text-xs text-[#1d1b19]"
-                />
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#727973] absolute left-3 top-2.5" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full pl-9 pr-9 py-2 bg-white border border-[#e6e2dd] rounded-xl text-xs text-[#1d1b19] focus:outline-none focus:border-[#032517]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-[#727973] hover:text-[#032517]"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[#032517] mb-1">
                   Confirmar nueva contraseña
                 </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repite la contraseña"
-                  className="w-full px-3 py-2 bg-white border border-[#e6e2dd] rounded-xl text-xs text-[#1d1b19]"
-                />
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#727973] absolute left-3 top-2.5" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repite la contraseña"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-[#e6e2dd] rounded-xl text-xs text-[#1d1b19] focus:outline-none focus:border-[#032517]"
+                  />
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading || verificationCode.length !== 6}
+                disabled={loading}
                 className="w-full py-2.5 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Guardar contraseña y entrar</span>}
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Guardar contraseña e Iniciar sesión</span>}
               </button>
             </form>
           )}

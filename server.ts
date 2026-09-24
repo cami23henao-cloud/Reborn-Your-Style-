@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -16,11 +19,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 interface VerificationEntry {
   code: string;
   expiresAt: number;
+  createdAt: number;
+  lastSentAt: number;
   email: string;
   name?: string;
   passwordHash?: string;
   salt?: string;
-  role?: 'normal' | 'confeccionista';
+  role?: 'usuario' | 'modista' | 'normal' | 'confeccionista';
 }
 
 const verificationStore = new Map<string, VerificationEntry>();
@@ -30,6 +35,8 @@ interface PasswordResetEntry {
   code: string;
   token?: string;
   expiresAt: number;
+  createdAt: number;
+  lastSentAt: number;
   email: string;
 }
 const passwordResetStore = new Map<string, PasswordResetEntry>();
@@ -53,7 +60,7 @@ interface ServerUser {
   authProvider: 'email' | 'google';
   passwordHash?: string;
   salt?: string;
-  role?: 'normal' | 'confeccionista' | 'admin';
+  role?: 'usuario' | 'modista' | 'admin' | 'normal' | 'confeccionista';
   isBlocked?: boolean;
   status?: 'activo' | 'bloqueado';
 }
@@ -215,19 +222,51 @@ initAdminUser();
 initDefaultData();
 saveDatabase();
 
+// Helper: SMTP Configuration status and validation
+function getMailerConfig() {
+  const host = process.env.SMTP_HOST?.trim();
+  const port = parseInt(process.env.SMTP_PORT?.trim() || '587', 10);
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+  const from =
+    process.env.EMAIL_FROM?.trim() ||
+    (user ? `"Reborn Your Style" <${user}>` : '"Reborn Your Style" <no-reply@rebornyourstyle.com>');
+
+  const missing: string[] = [];
+  if (!host) missing.push('SMTP_HOST');
+  if (!user) missing.push('SMTP_USER');
+  if (!pass) missing.push('SMTP_PASS');
+
+  return {
+    isConfigured: missing.length === 0,
+    missing,
+    host: host || '',
+    port,
+    user: user || '',
+    pass: pass || '',
+    from,
+  };
+}
+
 // Helper: Email Transporter for real email delivery
 function getMailer() {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const config = getMailerConfig();
 
-  if (host && user && pass) {
+  if (config.isConfigured && config.host && config.user && config.pass) {
     return nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
+      host: config.host,
+      port: config.port,
+      secure: config.port === 465,
+      auth: {
+        user: config.user,
+        pass: config.pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
   }
   return null;
@@ -391,6 +430,45 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
       });
     }
 
+    // Rate-limiting / Cooldown check: allow resend after 60 seconds
+    const existingEntry = verificationStore.get(cleanEmail);
+    if (existingEntry && existingEntry.lastSentAt) {
+      const elapsed = Date.now() - existingEntry.lastSentAt;
+      const cooldownMs = 60 * 1000;
+      if (elapsed < cooldownMs) {
+        const remainingSec = Math.ceil((cooldownMs - elapsed) / 1000);
+        return res.status(429).json({
+          error: `Por favor espera ${remainingSec} segundos antes de solicitar otro código de verificación.`,
+          remainingSeconds: remainingSec,
+        });
+      }
+    }
+
+    // Check SMTP configuration strictly
+    const mailConfig = getMailerConfig();
+    if (!mailConfig.isConfigured) {
+      console.error(
+        `[Servidor SMTP] No se pudo enviar el código de registro a ${cleanEmail}. ` +
+        `Faltan variables en .env: ${mailConfig.missing.join(', ')}`
+      );
+      return res.status(503).json({
+        error:
+          'El servicio de envío de correos no está configurado en el servidor. ' +
+          `Faltan las variables en .env: ${mailConfig.missing.join(', ')}. ` +
+          'Configura las credenciales SMTP para enviar correos reales.',
+        configured: false,
+        missing: mailConfig.missing,
+      });
+    }
+
+    const mailer = getMailer();
+    if (!mailer) {
+      return res.status(503).json({
+        error: 'No se pudo conectar con el transporte de correo Nodemailer.',
+        configured: false,
+      });
+    }
+
     // Generate secure 6-digit numeric verification code
     const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
@@ -401,56 +479,57 @@ app.post('/api/auth/send-verification-code', async (req, res) => {
       ? crypto.createHash('sha256').update(password + salt).digest('hex')
       : undefined;
 
-    const assignedRole: 'normal' | 'confeccionista' = role === 'confeccionista' ? 'confeccionista' : 'normal';
+    const assignedRole: 'usuario' | 'modista' =
+      role === 'modista' || role === 'confeccionista' ? 'modista' : 'usuario';
 
-    verificationStore.set(cleanEmail, {
-      code,
-      expiresAt,
-      email: cleanEmail,
-      name: name?.trim() || 'Usuario Reborn',
-      passwordHash,
-      salt,
-      role: assignedRole,
-    });
-
-    const mailer = getMailer();
-    if (mailer) {
-      try {
-        await mailer.sendMail({
-          from: process.env.EMAIL_FROM || '"Reborn Your Style" <no-reply@rebornyourstyle.com>',
-          to: cleanEmail,
-          subject: `${code} es tu código de verificación - Reborn Your Style`,
-          html: `
-            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #fef8f3; color: #1d1b19; border-radius: 12px; border: 1px solid #e6e2dd;">
-              <h2 style="font-family: Georgia, serif; color: #032517; font-size: 26px; margin-bottom: 8px;">Reborn Your Style</h2>
-              <p style="color: #486548; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0;">Moda Circular & Transformación Textil</p>
-              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
-              <p style="font-size: 16px; line-height: 1.6;">Hola <strong>${name || 'estimad@ usuario'}</strong>,</p>
-              <p style="font-size: 15px; line-height: 1.6;">Gracias por unirte a la comunidad de moda consciente y upcycling. Tu código de verificación confidencial es:</p>
-              <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
-                ${code}
-              </div>
-              <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código es de un solo uso y expira en 10 minutos. Por tu seguridad, nunca lo compartas con nadie.</p>
-              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
-              <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
+    try {
+      await mailer.sendMail({
+        from: mailConfig.from,
+        to: cleanEmail,
+        subject: `${code} es tu código de verificación - Reborn Your Style`,
+        text: `Hola ${name || 'estimad@ usuario'},\n\nGracias por unirte a la comunidad de moda consciente y upcycling.\nTu código de verificación de 6 dígitos es: ${code}\n\nEste código es de un solo uso y expira en 10 minutos.\n\nReborn Your Style`,
+        html: `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #fef8f3; color: #1d1b19; border-radius: 12px; border: 1px solid #e6e2dd;">
+            <h2 style="font-family: Georgia, serif; color: #032517; font-size: 26px; margin-bottom: 8px;">Reborn Your Style</h2>
+            <p style="color: #486548; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0;">Moda Circular & Transformación Textil</p>
+            <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+            <p style="font-size: 16px; line-height: 1.6;">Hola <strong>${name || 'estimad@ usuario'}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6;">Gracias por unirte a la comunidad de moda consciente y upcycling. Tu código de verificación confidencial es:</p>
+            <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
+              ${code}
             </div>
-          `,
-        });
+            <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código es de un solo uso y expira en 10 minutos. Por tu seguridad, nunca lo compartas con nadie.</p>
+            <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+            <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
+          </div>
+        `,
+      });
 
-        return res.json({
-          success: true,
-          message: `Código enviado con éxito a ${cleanEmail}. Revisa tu bandeja de entrada.`,
-        });
-      } catch (err: any) {
-        console.error('Error enviando correo SMTP:', err);
-      }
+      verificationStore.set(cleanEmail, {
+        code,
+        expiresAt,
+        createdAt: Date.now(),
+        lastSentAt: Date.now(),
+        email: cleanEmail,
+        name: name?.trim() || (assignedRole === 'modista' ? 'Modista Reborn' : 'Usuario Reborn'),
+        passwordHash,
+        salt,
+        role: assignedRole,
+      });
+
+      console.log(`[SMTP Éxito] Correo de verificación enviado a ${cleanEmail}`);
+
+      return res.json({
+        success: true,
+        message: `Código enviado con éxito a ${cleanEmail}. Revisa tu bandeja de entrada o spam.`,
+      });
+    } catch (err: any) {
+      console.error(`[SMTP Error] Error enviando correo de registro a ${cleanEmail}:`, err?.message || err);
+      return res.status(500).json({
+        error: 'Ocurrió un problema al enviar el correo electrónico con tu servidor SMTP.',
+        details: process.env.NODE_ENV !== 'production' ? err?.message : undefined,
+      });
     }
-
-    return res.json({
-      success: true,
-      message: `Código generado exitosamente para ${cleanEmail}.`,
-      verificationCode: code,
-    });
   } catch (error: any) {
     console.error('Error in send-verification-code:', error);
     res.status(500).json({ error: 'Error al generar código de verificación.' });
@@ -484,7 +563,8 @@ app.post('/api/auth/verify-code', (req, res) => {
     // Code matched! Delete used verification
     verificationStore.delete(cleanEmail);
 
-    const assignedRole: 'normal' | 'confeccionista' = entry.role || 'normal';
+    const assignedRole: 'usuario' | 'modista' =
+      entry.role === 'modista' || entry.role === 'confeccionista' ? 'modista' : 'usuario';
 
     // Retrieve existing user or create a new independent user
     let user = usersStore.get(cleanEmail);
@@ -494,16 +574,18 @@ app.post('/api/auth/verify-code', (req, res) => {
         name: entry.name || cleanEmail.split('@')[0],
         email: cleanEmail,
         avatar: '',
-        bio: assignedRole === 'confeccionista'
-          ? 'Confeccionista en Reborn Your Style. Ofrezco servicios de costura, confección y transformación textil sostenible.'
-          : 'Miembro de Reborn Your Style con correo verificado.',
+        bio: assignedRole === 'modista'
+          ? 'Modista profesional en Reborn Your Style. Especializada en arreglos a medida, confección y transformación textil sostenible.'
+          : 'Miembro de la comunidad Reborn Your Style apasionad@ por la moda circular.',
         country: 'Colombia',
         department: 'Antioquia',
         city: 'Medellín',
         neighborhood: 'Buenos Aires',
         address: '',
         phone: '',
-        preferences: ['Upcycling', 'Bordado', 'Sastrería'],
+        preferences: assignedRole === 'modista'
+          ? ['Patronaje', 'Arreglos y entalles', 'Upcycling y rediseño']
+          : ['Upcycling', 'Bordado', 'Sastrería'],
         isVerified: true,
         joinedDate: new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
         authProvider: 'email',
@@ -520,9 +602,7 @@ app.post('/api/auth/verify-code', (req, res) => {
         user.passwordHash = entry.passwordHash;
         user.salt = entry.salt;
       }
-      if (entry.role) {
-        user.role = entry.role;
-      }
+      user.role = assignedRole;
       usersStore.set(cleanEmail, user);
     }
     saveDatabase();
@@ -541,7 +621,8 @@ app.post('/api/auth/verify-code', (req, res) => {
   }
 });
 
-// 3. Auth: Solicitar recuperación de contraseña (código real a correo y token seguro)
+// 3. Auth: Solicitar recuperación de contraseña (código real a correo)
+// NO requiere registro previo del correo; envía código numérico de 6 dígitos real
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -552,59 +633,108 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'Ingresa un correo electrónico con formato válido.' });
     }
 
-    const user = usersStore.get(cleanEmail);
-    if (!user) {
-      return res.status(404).json({ error: 'No encontramos ninguna cuenta registrada con este correo electrónico.' });
-    }
-
-    const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
-    const token = `rys_rst_${crypto.randomBytes(24).toString('hex')}`;
-    const expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes validity
-
-    passwordResetStore.set(cleanEmail, { code, token, expiresAt, email: cleanEmail });
-
-    const resetLink = `/recuperar-clave?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
-
-    const mailer = getMailer();
-    if (mailer) {
-      try {
-        await mailer.sendMail({
-          from: process.env.EMAIL_FROM || '"Reborn Your Style" <no-reply@rebornyourstyle.com>',
-          to: cleanEmail,
-          subject: `${code} es tu código para restablecer tu contraseña - Reborn Your Style`,
-          html: `
-            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #fef8f3; color: #1d1b19; border-radius: 12px; border: 1px solid #e6e2dd;">
-              <h2 style="font-family: Georgia, serif; color: #032517; font-size: 26px; margin-bottom: 8px;">Reborn Your Style</h2>
-              <p style="color: #486548; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0;">Recuperación de Contraseña</p>
-              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
-              <p style="font-size: 16px; line-height: 1.6;">Hola <strong>${user.name}</strong>,</p>
-              <p style="font-size: 15px; line-height: 1.6;">Hemos recibido una solicitud para cambiar la contraseña de tu cuenta en Reborn Your Style. Tu código de recuperación confidencial es:</p>
-              <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
-                ${code}
-              </div>
-              <p style="font-size: 14px; text-align: center; margin: 20px 0;">
-                <a href="${resetLink}" style="display: inline-block; background-color: #2d4f30; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-                  Restablecer mi contraseña en Reborn
-                </a>
-              </p>
-              <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código de un solo uso es válido por 30 minutos. Si no realizaste esta solicitud, puedes ignorar este correo; tu cuenta permanece segura.</p>
-              <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
-              <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
-            </div>
-          `,
+    // Rate-limiting / Cooldown check: allow resend after 60 seconds
+    const existingEntry = passwordResetStore.get(cleanEmail);
+    if (existingEntry && existingEntry.lastSentAt) {
+      const elapsed = Date.now() - existingEntry.lastSentAt;
+      const cooldownMs = 60 * 1000;
+      if (elapsed < cooldownMs) {
+        const remainingSec = Math.ceil((cooldownMs - elapsed) / 1000);
+        return res.status(429).json({
+          error: `Por favor espera ${remainingSec} segundos antes de solicitar un nuevo código de recuperación.`,
+          remainingSeconds: remainingSec,
         });
-      } catch (err: any) {
-        console.warn('Error enviando correo SMTP:', err);
       }
     }
 
-    return res.json({
-      success: true,
-      message: `Enlace seguro de recuperación generado para ${cleanEmail}. Revisa tu bandeja de entrada o accede al formulario de restablecimiento.`,
-      resetToken: token,
-      resetLink,
-      code,
-    });
+    // Check SMTP configuration strictly
+    const mailConfig = getMailerConfig();
+    if (!mailConfig.isConfigured) {
+      console.error(
+        `[Servidor SMTP] No se pudo enviar el código de recuperación a ${cleanEmail}. ` +
+        `Faltan variables en .env: ${mailConfig.missing.join(', ')}`
+      );
+      return res.status(503).json({
+        error:
+          'El servicio de correo electrónico no está configurado en el servidor. ' +
+          `Faltan las variables en .env: ${mailConfig.missing.join(', ')}. ` +
+          'Configura tus credenciales SMTP para habilitar el envío real de correos.',
+        configured: false,
+        missing: mailConfig.missing,
+      });
+    }
+
+    const mailer = getMailer();
+    if (!mailer) {
+      console.error('[Servidor SMTP] No se pudo inicializar el transporte de correo Nodemailer.');
+      return res.status(503).json({
+        error: 'No se pudo conectar con el transporte de correo. Revisa la configuración SMTP.',
+        configured: false,
+      });
+    }
+
+    // No se exige registro previo: si el usuario ya existe se usa su nombre, si no, su prefijo
+    const user = usersStore.get(cleanEmail);
+    const displayName = user?.name || cleanEmail.split('@')[0];
+
+    const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
+    const token = `rys_rst_${crypto.randomBytes(24).toString('hex')}`;
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutos de validez
+    const resetLink = `/recuperar-clave?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
+
+    try {
+      await mailer.sendMail({
+        from: mailConfig.from,
+        to: cleanEmail,
+        subject: `${code} es tu código de recuperación de contraseña - Reborn Your Style`,
+        text: `Hola ${displayName},\n\nHemos recibido una solicitud para restablecer tu contraseña en Reborn Your Style.\n\nTu código de verificación de 6 dígitos es: ${code}\n\nEste código expira en 15 minutos y es de un solo uso.\nSi no realizaste esta solicitud, puedes ignorar este mensaje de forma segura.\n\nReborn Your Style - Moda Circular & Transformación Textil`,
+        html: `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #fef8f3; color: #1d1b19; border-radius: 12px; border: 1px solid #e6e2dd;">
+            <h2 style="font-family: Georgia, serif; color: #032517; font-size: 26px; margin-bottom: 8px;">Reborn Your Style</h2>
+            <p style="color: #486548; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0;">Recuperación y Acceso de Contraseña</p>
+            <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+            <p style="font-size: 16px; line-height: 1.6;">Hola <strong>${displayName}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6;">Hemos recibido una solicitud para crear o actualizar tu contraseña en Reborn Your Style. Tu código de verificación confidencial de 6 dígitos es:</p>
+            <div style="background-color: #032517; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 18px 24px; border-radius: 8px; margin: 28px 0;">
+              ${code}
+            </div>
+            <p style="font-size: 14px; text-align: center; margin: 20px 0;">
+              <a href="${resetLink}" style="display: inline-block; background-color: #2d4f30; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                Restablecer mi contraseña en Reborn
+              </a>
+            </p>
+            <p style="font-size: 13px; color: #727973; line-height: 1.5;">Este código es de un solo uso y expira en 15 minutos. Si no realizaste esta solicitud, puedes ignorar este mensaje.</p>
+            <hr style="border: none; border-top: 1px solid #e6e2dd; margin: 24px 0;" />
+            <p style="font-size: 12px; color: #727973; text-align: center;">Reborn Your Style · Cada puntada cuenta una nueva historia.</p>
+          </div>
+        `,
+      });
+
+      // ONLY save to store AFTER the email is successfully delivered
+      passwordResetStore.set(cleanEmail, {
+        code,
+        token,
+        expiresAt,
+        createdAt: Date.now(),
+        lastSentAt: Date.now(),
+        email: cleanEmail,
+      });
+
+      console.log(`[SMTP Éxito] Correo de recuperación con código de 6 dígitos enviado a ${cleanEmail}`);
+
+      return res.json({
+        success: true,
+        message: `Código de verificación de 6 dígitos enviado a ${cleanEmail}. Revisa tu bandeja de entrada o spam.`,
+      });
+    } catch (sendErr: any) {
+      console.error(`[SMTP Error] Error enviando correo de recuperación a ${cleanEmail}:`, sendErr?.message || sendErr);
+      return res.status(500).json({
+        error:
+          'Ocurrió un problema al enviar el correo electrónico con tu servidor SMTP. ' +
+          'Verifica que el servidor SMTP y las credenciales sean válidas.',
+        details: process.env.NODE_ENV !== 'production' ? sendErr?.message : undefined,
+      });
+    }
   } catch (error: any) {
     console.error('Error in forgot-password:', error);
     res.status(500).json({ error: 'Error al procesar la solicitud de recuperación.' });
@@ -634,10 +764,10 @@ app.post('/api/auth/verify-reset-code', (req, res) => {
     const isCodeMatch = code && entry.code === code.trim();
 
     if (!isTokenMatch && !isCodeMatch) {
-      return res.status(400).json({ error: 'El código o enlace de recuperación no es correcto. Verifica los datos recibidos.' });
+      return res.status(400).json({ error: 'El código ingresado no coincide con el enviado a tu correo.' });
     }
 
-    return res.json({ success: true, message: 'Validación completada correctamente.' });
+    return res.json({ success: true, message: 'Código verificado correctamente. Ahora puedes crear tu nueva contraseña.' });
   } catch (err: any) {
     return res.status(500).json({ error: 'Error al verificar el código.' });
   }
@@ -659,12 +789,12 @@ app.post('/api/auth/reset-password', (req, res) => {
     const entry = passwordResetStore.get(cleanEmail);
 
     if (!entry) {
-      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación activa para este correo. Solicita un nuevo enlace.' });
+      return res.status(400).json({ error: 'No hay ninguna solicitud de recuperación activa para este correo. Solicita un nuevo código.' });
     }
 
     if (Date.now() > entry.expiresAt) {
       passwordResetStore.delete(cleanEmail);
-      return res.status(400).json({ error: 'El enlace de recuperación ha expirado. Solicita uno nuevo.' });
+      return res.status(400).json({ error: 'El enlace o código de recuperación ha expirado. Solicita uno nuevo.' });
     }
 
     const isTokenMatch = token && entry.token === token;
@@ -674,21 +804,45 @@ app.post('/api/auth/reset-password', (req, res) => {
       return res.status(400).json({ error: 'El enlace o código de recuperación no es válido.' });
     }
 
-    const user = usersStore.get(cleanEmail);
-    if (!user) {
-      return res.status(404).json({ error: 'Usuario no encontrado.' });
-    }
+    // El código se invalida inmediatamente para que NO pueda volver a usarse
+    passwordResetStore.delete(cleanEmail);
 
+    let user = usersStore.get(cleanEmail);
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.createHash('sha256').update(newPassword + salt).digest('hex');
 
-    user.passwordHash = passwordHash;
-    user.salt = salt;
-    user.isVerified = true;
-    usersStore.set(cleanEmail, user);
+    if (!user) {
+      // Si el correo no estaba registrado previamente, se crea automáticamente en segundo plano
+      user = {
+        id: `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        avatar: '',
+        bio: 'Miembro de la comunidad Reborn Your Style con correo verificado.',
+        country: 'Colombia',
+        department: 'Antioquia',
+        city: 'Medellín',
+        neighborhood: 'Buenos Aires',
+        address: '',
+        phone: '',
+        preferences: ['Upcycling', 'Bordado', 'Sastrería'],
+        isVerified: true,
+        joinedDate: new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+        authProvider: 'email',
+        passwordHash,
+        salt,
+        role: 'usuario',
+        isBlocked: false,
+        status: 'activo',
+      };
+      usersStore.set(cleanEmail, user);
+    } else {
+      user.passwordHash = passwordHash;
+      user.salt = salt;
+      user.isVerified = true;
+      usersStore.set(cleanEmail, user);
+    }
     saveDatabase();
-
-    passwordResetStore.delete(cleanEmail);
 
     const sessionToken = `rys_sec_${crypto.randomBytes(32).toString('hex')}`;
     sessionsStore.set(sessionToken, user.id);
@@ -703,6 +857,19 @@ app.post('/api/auth/reset-password', (req, res) => {
     console.error('Error in reset-password:', err);
     return res.status(500).json({ error: 'Error al restablecer la contraseña.' });
   }
+});
+
+// 5b. Auth: Diagnóstico de estado SMTP (seguro, sin exponer contraseñas)
+app.get('/api/auth/smtp-status', (req, res) => {
+  const config = getMailerConfig();
+  return res.json({
+    configured: config.isConfigured,
+    host: config.host || null,
+    port: config.port,
+    userConfigured: !!config.user,
+    from: config.from,
+    missingVariables: config.missing,
+  });
 });
 
 // 6. Auth: Real Google OAuth with cryptographic token verification (supports ID token and OAuth2 Access Token)

@@ -1,5 +1,9 @@
-export type UserRole = 'normal' | 'confeccionista' | 'admin';
+export type UserRole = 'usuario' | 'modista' | 'admin' | 'normal' | 'confeccionista';
 export type UserStatus = 'activo' | 'bloqueado';
+
+export const isModista = (role?: UserRole): boolean => role === 'modista' || role === 'confeccionista';
+export const isAdmin = (role?: UserRole): boolean => role === 'admin';
+export const isUsuario = (role?: UserRole): boolean => !isModista(role) && !isAdmin(role);
 
 export interface User {
   id: string;

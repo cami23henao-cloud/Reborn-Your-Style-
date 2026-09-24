@@ -19,11 +19,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'normal' | 'confeccionista'>('normal');
+  const [selectedRole, setSelectedRole] = useState<'usuario' | 'modista'>('usuario');
+  const [forgotStep, setForgotStep] = useState<'email' | 'code' | 'password'>('email');
 
   // Recovery & Verification Fields
   const [verificationCode, setVerificationCode] = useState('');
   const [countdown, setCountdown] = useState<number>(600); // 10 min
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -39,11 +41,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   // Countdown timer
   useEffect(() => {
     let timer: any;
-    if (step === 'verify' && countdown > 0) {
+    if ((step === 'verify' || (mode === 'forgot' && forgotStep === 'code')) && countdown > 0) {
       timer = setInterval(() => setCountdown((c) => c - 1), 1000);
     }
     return () => clearInterval(timer);
-  }, [step, countdown]);
+  }, [step, mode, forgotStep, countdown]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    let timer: any;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown((c) => Math.max(0, c - 1)), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Google Identity Services (GSI) One Tap background initialization
   useEffect(() => {
@@ -381,6 +392,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   };
 
   // 4. Recuperación: Solicitar código de recuperación
+  // 4. Recuperación de contraseña: paso 1 enviar código (sin exigir registro previo)
   const handleRequestPasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -404,14 +416,52 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setStep('verify');
+        setForgotStep('code');
         setCountdown(600);
-        setInfoMessage(data.message || `Código enviado a ${cleanEmail}. Revisa tu bandeja de entrada.`);
+        setResendCooldown(60);
+        setInfoMessage(data.message || `Código de verificación de 6 dígitos enviado a ${cleanEmail}. Revisa tu bandeja de entrada.`);
       } else {
         setErrorMessage(data.error || 'No se pudo enviar el código de recuperación.');
       }
     } catch (err) {
       setErrorMessage('Error al conectar con el servidor.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4b. Recuperación: paso 2 verificar el código de 6 dígitos
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setInfoMessage('');
+
+    const cleanCode = verificationCode.trim();
+    if (!cleanCode || cleanCode.length !== 6) {
+      setErrorMessage('Ingresa el código numérico de 6 dígitos completo.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-reset-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: cleanCode,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setForgotStep('password');
+        setInfoMessage('¡Código verificado con éxito! Ahora puedes definir tu nueva contraseña.');
+      } else {
+        setErrorMessage(data.error || 'Código incorrecto o expirado.');
+      }
+    } catch (err) {
+      setErrorMessage('Error de conexión al verificar el código.');
     } finally {
       setLoading(false);
     }
@@ -671,7 +721,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                       type="button"
                       onClick={() => {
                         setMode('forgot');
-                        setStep('form');
+                        setForgotStep('email');
+                        setVerificationCode('');
+                        setPassword('');
+                        setConfirmPassword('');
                         setErrorMessage('');
                         setInfoMessage('');
                       }}
@@ -789,46 +842,52 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
                 <div>
                   <label className="block text-xs font-semibold text-[#032517] mb-1.5">
-                    Tipo de cuenta
+                    ¿Qué tipo de cuenta deseas crear? <span className="text-red-500">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setSelectedRole('normal')}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        selectedRole === 'normal'
-                          ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                      onClick={() => setSelectedRole('usuario')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedRole === 'usuario'
+                          ? 'border-[#032517] bg-[#f0f4f0] ring-2 ring-[#032517]'
                           : 'border-[#e6e2dd] bg-[#fef8f3] hover:bg-stone-50'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-[#032517]">Usuario normal</span>
-                        {selectedRole === 'normal' && (
+                        <span className="text-xs font-bold text-[#032517] flex items-center gap-1.5">
+                          <UserIcon className="w-3.5 h-3.5 text-[#2e4c2c]" />
+                          Usuario
+                        </span>
+                        {selectedRole === 'usuario' && (
                           <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
                         )}
                       </div>
                       <p className="text-[10px] text-stone-500 leading-tight">
-                        Para renovar prendas y participar en la comunidad.
+                        Para renovar prendas, comprar, intercambiar y unirte a la moda circular.
                       </p>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setSelectedRole('confeccionista')}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        selectedRole === 'confeccionista'
-                          ? 'border-[#032517] bg-[#f0f4f0] ring-1 ring-[#032517]'
+                      onClick={() => setSelectedRole('modista')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        selectedRole === 'modista'
+                          ? 'border-[#032517] bg-[#f0f4f0] ring-2 ring-[#032517]'
                           : 'border-[#e6e2dd] bg-[#fef8f3] hover:bg-stone-50'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-[#032517]">Confeccionista</span>
-                        {selectedRole === 'confeccionista' && (
+                        <span className="text-xs font-bold text-[#032517] flex items-center gap-1.5">
+                          <Scissors className="w-3.5 h-3.5 text-[#2e4c2c]" />
+                          Modista
+                        </span>
+                        {selectedRole === 'modista' && (
                           <div className="w-2 h-2 rounded-full bg-[#032517]"></div>
                         )}
                       </div>
                       <p className="text-[10px] text-stone-500 leading-tight">
-                        Para modistas, costura y transformación textil.
+                        Para modistas, costura a medida, arreglos y transformación textil.
                       </p>
                     </button>
                   </div>
@@ -925,12 +984,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               </form>
             )}
 
-            {/* -------------------- 5. FORGOT PASSWORD: STEP FORM -------------------- */}
-            {mode === 'forgot' && step === 'form' && (
+            {/* -------------------- 5. FORGOT PASSWORD: STEP 1 - EMAIL -------------------- */}
+            {mode === 'forgot' && forgotStep === 'email' && (
               <form onSubmit={handleRequestPasswordReset} className="space-y-4">
+                <div className="text-center mb-1">
+                  <h3 className="text-base font-bold text-[#032517]">Recuperar Contraseña</h3>
+                  <p className="text-xs text-stone-600 mt-1">
+                    Escribe tu correo electrónico para enviarte un código de verificación real de 6 dígitos.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-[#032517] mb-1.5">
-                    Correo electrónico de tu cuenta
+                    Correo electrónico
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-[#727973] absolute left-3.5 top-3" />
@@ -944,9 +1010,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                       className="w-full pl-10 pr-4 py-2.5 bg-[#fef8f3] border border-[#e6e2dd] rounded-xl text-xs text-[#1d1b19] focus:outline-none focus:border-[#032517] focus:ring-1 focus:ring-[#032517] transition-all"
                     />
                   </div>
-                  <p className="text-[11px] text-[#727973] mt-1.5">
-                    Te enviaremos un código de seguridad de 6 dígitos para validar tu identidad.
-                  </p>
                 </div>
 
                 <button
@@ -958,7 +1021,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   {loading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Generando código de recuperación...</span>
+                      <span>Enviando código...</span>
                     </>
                   ) : (
                     <>
@@ -972,7 +1035,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   type="button"
                   onClick={() => {
                     setMode('login');
-                    setStep('form');
+                    setForgotStep('email');
                     setErrorMessage('');
                     setInfoMessage('');
                   }}
@@ -984,12 +1047,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               </form>
             )}
 
-            {/* -------------------- 6. FORGOT PASSWORD: STEP VERIFY & RESET -------------------- */}
-            {mode === 'forgot' && step === 'verify' && (
-              <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+            {/* -------------------- 6. FORGOT PASSWORD: STEP 2 - CODE -------------------- */}
+            {mode === 'forgot' && forgotStep === 'code' && (
+              <form onSubmit={handleVerifyResetCode} className="space-y-4">
                 <div className="text-center p-3 bg-[#f8f3ee] rounded-2xl border border-[#e6e2dd]">
                   <p className="text-xs text-[#424843]">
-                    Código enviado al correo:
+                    Hemos enviado un código de 6 dígitos a:
                   </p>
                   <p className="font-semibold text-xs text-[#032517] mt-0.5">{email}</p>
                 </div>
@@ -1003,11 +1066,69 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                     type="text"
                     maxLength={6}
                     required
+                    autoFocus
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                     placeholder="123456"
                     className="w-full text-center tracking-[8px] font-mono text-2xl font-bold py-3 bg-[#fef8f3] border-2 border-[#032517] rounded-xl text-[#032517] focus:outline-none focus:ring-2 focus:ring-[#032517]"
                   />
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#727973]">
+                  <span>Expira en: <strong className="text-[#032517]">{formatTime(countdown)}</strong></span>
+                  <button
+                    type="button"
+                    onClick={handleRequestPasswordReset}
+                    disabled={loading || resendCooldown > 0}
+                    className="text-[#486548] hover:text-[#032517] font-semibold underline disabled:opacity-50 disabled:no-underline"
+                  >
+                    {resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : 'Reenviar código'}
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || verificationCode.trim().length !== 6}
+                  className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Verificando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Verificar código</span>
+                      <CheckCircle2 className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotStep('email');
+                    setVerificationCode('');
+                    setErrorMessage('');
+                  }}
+                  className="w-full text-center text-xs text-[#727973] hover:text-[#032517]"
+                >
+                  ← Cambiar correo electrónico
+                </button>
+              </form>
+            )}
+
+            {/* -------------------- 7. FORGOT PASSWORD: STEP 3 - NEW PASSWORD -------------------- */}
+            {mode === 'forgot' && forgotStep === 'password' && (
+              <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+                <div className="text-center p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+                  <div className="w-8 h-8 mx-auto rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 mb-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#032517]">¡Código Verificado!</h3>
+                  <p className="text-xs text-stone-600 mt-0.5">
+                    Define una nueva contraseña para <strong className="text-[#032517]">{email}</strong>.
+                  </p>
                 </div>
 
                 <div>
@@ -1055,46 +1176,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-[#727973]">
-                  <span>Expira en: <strong className="text-[#032517]">{formatTime(countdown)}</strong></span>
-                  <button
-                    type="button"
-                    onClick={handleRequestPasswordReset}
-                    disabled={loading || countdown > 540}
-                    className="text-[#486548] hover:text-[#032517] font-semibold underline disabled:opacity-50"
-                  >
-                    Reenviar código
-                  </button>
-                </div>
-
                 <button
                   id="btn-submit-reset-password"
                   type="submit"
-                  disabled={loading || verificationCode.length !== 6}
+                  disabled={loading}
                   className="w-full py-3 px-4 bg-[#9bb593] text-white rounded-full text-xs font-bold hover:bg-[#2e4c2c] transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Actualizando contraseña...</span>
+                      <span>Guardando contraseña...</span>
                     </>
                   ) : (
                     <>
-                      <span>Guardar contraseña y entrar</span>
+                      <span>Guardar contraseña e iniciar sesión</span>
                       <CheckCircle2 className="w-4 h-4" />
                     </>
                   )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep('form');
-                    setErrorMessage('');
-                  }}
-                  className="w-full text-center text-xs text-[#727973] hover:text-[#032517]"
-                >
-                  ← Cambiar correo
                 </button>
               </form>
             )}
